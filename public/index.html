@@ -340,6 +340,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div class="ac" onclick="exportCSV()"><div class="ac-i">📊</div><div class="ac-l">Exportar CSV</div><div class="ac-s">Inventario completo</div></div>
       <div class="ac" onclick="showKPIs()"><div class="ac-i">📈</div><div class="ac-l">KPIs</div><div class="ac-s">Métricas período</div></div>
       <div class="ac" onclick="clearMovs()"><div class="ac-i">🗑️</div><div class="ac-l">Limpiar movs.</div><div class="ac-s">Solo Admin</div></div>
+      <div class="ac" onclick="migrateToFirestore()" style="border-color:#2ecc71"><div class="ac-i">☁️</div><div class="ac-l">Sync Firestore</div><div class="ac-s">Subir todos los items</div></div>
+      <div class="ac" onclick="cleanDuplicates()" style="border-color:#e74c3c"><div class="ac-i">🧹</div><div class="ac-l">Limpiar duplicados</div><div class="ac-s">Eliminar IDs viejos</div></div>
       <div class="ac" onclick="resetStock()"><div class="ac-i">🔄</div><div class="ac-l">Reset stock</div><div class="ac-s">Volver a inicial</div></div>
       <div class="ac" onclick="abrirCargaExcel()" style="border-color:rgba(0,230,118,.3)"><div class="ac-i">📥</div><div class="ac-l">Cargar Excel</div><div class="ac-s">Reemplazar inventario</div></div>
     </div>
@@ -552,6 +554,29 @@ function initFirebase() {
   }
 }
 
+function getDocId(pn, desc) {
+  return (pn + '_' + (desc||'')).replace(/[.#$[\]/\s]/g,'_').substring(0,100);
+}
+window.getDocId = getDocId;
+
+async function loadFromFirestore() {
+  if (!db) return;
+  try {
+    const snap = await db.collection('planta4_inventario').get();
+    if (snap.empty) return;
+    const firestoreItems = [];
+    snap.forEach(d => firestoreItems.push(d.data()));
+    if (firestoreItems.length > 0) {
+      const masterOnly = items.filter(i => !firestoreItems.find(fi => fi.pn === i.pn && fi.desc === i.desc));
+      items = [...firestoreItems, ...masterOnly];
+      saveLocal();
+      updateDash(); renderInv(); renderHist(); renderLocMap();
+      toast('📦 Inventario sincronizado (' + firestoreItems.length + ' items)', 'ok');
+    }
+  } catch(e) { console.error('loadFromFirestore:', e); }
+}
+window.loadFromFirestore = loadFromFirestore;
+
 function startSync() {
   if (!db) return;
   unsub = db.collection('planta4_movimientos').orderBy('fecha','desc').limit(50)
@@ -560,13 +585,28 @@ function startSync() {
       snap.forEach(d => fm.push(d.data()));
       if (fm.length > 0) { movs = fm; saveLocal(); renderHist(); renderDashMovs(); }
     }, () => {});
+  db.collection('planta4_inventario')
+    .onSnapshot(snap => {
+      snap.docChanges().forEach(change => {
+        const fi = change.doc.data();
+        const idx = items.findIndex(i => i.pn === fi.pn && i.desc === fi.desc);
+        if (change.type === 'removed') {
+          if (idx >= 0) items.splice(idx, 1);
+        } else {
+          if (idx >= 0) { items[idx] = { ...items[idx], ...fi }; }
+          else { items.push(fi); }
+        }
+      });
+      saveLocal(); updateDash(); renderInv(); renderLocMap();
+    }, () => {});
 }
 
 async function pushMov(mov) {
   if (!db) return;
   try {
     await db.collection('planta4_movimientos').add(mov);
-    await db.collection('planta4_inventario').doc(mov.pn).set(items.find(i=>i.pn===mov.pn)||{}, {merge:true});
+    const movItem = items.find(i=>i.pn===mov.pn && i.desc===mov.desc) || items.find(i=>i.pn===mov.pn);
+    if(movItem) await db.collection('planta4_inventario').doc(getDocId(mov.pn,movItem.desc)).set(movItem, {merge:true});
   } catch(e) {}
 }
 
@@ -616,6 +656,7 @@ function launch() {
   document.getElementById('navAdmin').style.display = user.role==='admin'?'flex':'none';
   document.getElementById('tbDate').textContent = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'});
   startSync();
+  loadFromFirestore();
   updateDash(); renderInv(); renderHist(); renderLocMap(); buildAdmin();
 }
 
@@ -983,6 +1024,51 @@ function showKPIs() {
   document.getElementById('modal').classList.add('show');
 }
 function clearMovs() { if(user.role!=='admin'){toast('Solo admins','err');return;} if(!confirm('¿Limpiar historial?'))return; movs=[]; saveLocal(); renderHist(); updateDash(); toast('Historial limpiado','ok'); }
+async function migrateToFirestore() {
+  if (!db) { toast('Sin conexión a Firebase','err'); return; }
+  if (!confirm('¿Subir todos los items a Firestore?')) return;
+  toast('Sincronizando...','info');
+  try {
+    const batch = db.batch();
+    items.forEach(item => {
+      const docId = getDocId(item.pn, item.desc);
+      batch.set(db.collection('planta4_inventario').doc(docId), item);
+    });
+    await batch.commit();
+    toast('✅ ' + items.length + ' items sincronizados', 'ok');
+  } catch(e) { toast('Error: ' + e.message,'err'); console.error(e); }
+}
+window.migrateToFirestore = migrateToFirestore;
+
+async function cleanDuplicates() {
+  if (!db) { toast('Sin conexión a Firebase','err'); return; }
+  if (!confirm('¿Eliminar documentos duplicados (IDs sin descripción)?')) return;
+  toast('Limpiando duplicados...','info');
+  try {
+    const snap = await db.collection('planta4_inventario').get();
+    const toDelete = [];
+    snap.forEach(d => {
+      const id = d.id;
+      // Documentos viejos: ID es solo el PN sin descripción (no contiene _)
+      // o el ID no tiene descripción después del PN
+      const data = d.data();
+      const expectedId = getDocId(data.pn||'', data.desc||'');
+      if (id !== expectedId && !id.includes('_') || (id === data.pn)) {
+        toDelete.push(d.ref);
+      }
+    });
+    if (toDelete.length === 0) { toast('Sin duplicados encontrados ✓','ok'); return; }
+    // Eliminar en lotes de 500
+    for(let i=0; i<toDelete.length; i+=400) {
+      const batch = db.batch();
+      toDelete.slice(i,i+400).forEach(ref => batch.delete(ref));
+      await batch.commit();
+    }
+    toast('✅ ' + toDelete.length + ' duplicados eliminados', 'ok');
+  } catch(e) { toast('Error: ' + e.message,'err'); console.error(e); }
+}
+window.cleanDuplicates = cleanDuplicates;
+
 function resetStock() { if(user.role!=='admin'){toast('Solo admins','err');return;} if(!confirm('¿Resetear inventario inicial?'))return; items=MASTER.map(r=>({...r,entradas:0,salidas:0,actual:r.inicial,ubicacion:'Almacén',historial:[{tipo:'INI',fecha:new Date().toISOString(),qty:r.inicial,loc:'Almacén',user:'Sistema',ref:'Reset'}]})); movs=[]; saveLocal(); updateDash(); renderInv(); renderHist(); renderLocMap(); toast('Stock reseteado','ok'); }
 
 // ── TOAST ──
@@ -1007,7 +1093,7 @@ function doAddPN() {
   };
   items.push(ni);
   saveLocal();
-  if (db) db.collection('planta4_inventario').doc(pn).set(ni).catch(function(){});
+  if (db) db.collection('planta4_inventario').doc(getDocId(ni.pn,ni.desc)).set(ni).catch(function(){});
   document.getElementById('npPN').value = '';
   document.getElementById('npD').value = '';
   document.getElementById('npS').value = '';
@@ -1022,7 +1108,8 @@ function doDeletePN(pn) {
   if (!confirm('¿Eliminar ' + pn + '? Esta acción no se puede deshacer.')) return;
   items = items.filter(function(i) { return i.pn !== pn; });
   saveLocal();
-  if (db) db.collection('planta4_inventario').doc(pn).delete().catch(function(){});
+  const delItem = items.find(i=>i.pn===pn);
+  if (db) db.collection('planta4_inventario').doc(getDocId(pn, delItem?delItem.desc:'')).delete().catch(function(){});
   updateDash(); renderInv(); buildAdmin();
   toast('PN ' + pn + ' eliminado', 'ok');
 }
@@ -1117,7 +1204,7 @@ function xlsConfirmar(){
   updateDash();renderInv();renderHist();renderLocMap();
   if(db){
     var batch=db.batch();
-    _xlsDatos.forEach(function(item){batch.set(db.collection('planta4_inventario').doc(item.pn.replace(/[.#$[\]/]/g,'_')),item);});
+    _xlsDatos.forEach(function(item){batch.set(db.collection('planta4_inventario').doc(getDocId(item.pn,item.desc)),item);});
     batch.commit().then(function(){document.getElementById('xSpinnerAnim').style.display='none';document.getElementById('xSpinner').style.display='inline-block';document.getElementById('xSpinner').textContent='✅';document.getElementById('xMsg').textContent=_xlsDatos.length+' partes cargadas correctamente.';setTimeout(cerrarCargaExcel,2000);toast('Inventario actualizado','ok');}).catch(function(err){document.getElementById('xSpinnerAnim').style.display='none';document.getElementById('xSpinner').style.display='inline-block';document.getElementById('xSpinner').textContent='⚠️';document.getElementById('xMsg').textContent='Local OK. Firebase: '+err.message;setTimeout(cerrarCargaExcel,3000);});
   } else {
     document.getElementById('xSpinnerAnim').style.display='none';document.getElementById('xSpinner').style.display='inline-block';document.getElementById('xSpinner').textContent='✅';document.getElementById('xMsg').textContent=_xlsDatos.length+' partes cargadas (local).';setTimeout(cerrarCargaExcel,2000);toast('Inventario cargado','ok');
