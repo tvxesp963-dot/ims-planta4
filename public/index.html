@@ -12,7 +12,7 @@
 :root{--bg:#080c18;--bg2:#0e1325;--bg3:#141929;--bg4:#1c2238;--accent:#4da6ff;--accent2:#1a6fd4;--accent3:#0d4a99;--green:#00e676;--green2:#00b85a;--red:#ff4444;--amber:#ffb300;--cyan:#00e5ff;--text:#dde3f5;--text2:#7a88b8;--text3:#3d4d77;--border:#1e2a4a;--border2:#263558;}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
-#loginScreen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:2rem}
+#loginScreen{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:2rem}
 .lc{background:var(--bg2);border:1px solid var(--border2);border-radius:20px;padding:2.5rem 2rem;width:100%;max-width:380px;position:relative;overflow:hidden}
 .lc::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent)}
 .lb{display:flex;align-items:center;gap:12px;justify-content:center;margin-bottom:1.5rem}
@@ -43,7 +43,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .uc{display:flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border2);border-radius:14px;padding:3px 9px}
 .ua{width:20px;height:20px;border-radius:50%;background:var(--accent2);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700}
 .ur{font-size:9px;padding:1px 5px;border-radius:7px;font-weight:600}
-.ra{background:rgba(255,179,0,.15);color:var(--amber)}
+.ra{background:rgba(255,179,0,.15);color:var(--amber)}.rv{background:rgba(230,126,34,.15);color:#e67e22}
 .ro{background:rgba(77,166,255,.15);color:var(--accent)}
 .btn-out{background:none;border:none;color:var(--text2);font-size:17px;cursor:pointer}
 .page{display:none;padding:1rem;flex:1;overflow-y:auto;padding-bottom:5rem}
@@ -179,6 +179,27 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 </head>
 <body>
 
+<div id="viewerScreen" style="display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:2rem;background:var(--bg)">
+  <div style="background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:32px 28px;width:100%;max-width:340px;text-align:center">
+    <div style="font-size:2.2rem;margin-bottom:8px">📦</div>
+    <div style="font-size:1rem;font-weight:700;color:var(--accent);margin-bottom:3px">IMS · Planta 4</div>
+    <div style="font-size:.72rem;color:var(--text2);margin-bottom:20px">Inventario · Acceso restringido</div>
+    <input type="password" id="viewerPass" placeholder="Clave de acceso"
+      style="width:100%;background:var(--bg3);border:1px solid var(--border2);color:var(--text);border-radius:9px;padding:11px 14px;font-size:.9rem;text-align:center;letter-spacing:2px;margin-bottom:10px;outline:none;box-sizing:border-box"
+      onkeydown="if(event.key==='Enter')checkViewerPass()">
+    <button onclick="checkViewerPass()"
+      style="width:100%;padding:12px;background:var(--accent);color:#000;border:none;border-radius:9px;font-size:.85rem;font-weight:700;cursor:pointer">
+      🔓 Ver Inventario
+    </button>
+    <div id="viewerErr" style="display:none;margin-top:10px;background:#3d1a1a;color:var(--red);border:1px solid var(--red);border-radius:8px;padding:8px;font-size:.75rem">
+      ❌ Clave incorrecta
+    </div>
+    <div style="margin-top:16px;font-size:.68rem;color:var(--text2)">
+      ¿Eres usuario registrado? <span onclick="showLogin()" style="color:var(--accent);cursor:pointer">Iniciar sesión</span>
+    </div>
+  </div>
+</div>
+
 <div id="loginScreen">
   <div class="lc">
     <div class="lb">
@@ -190,11 +211,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <input class="fi" id="liEmail" type="email" placeholder="correo@empresa.com">
     <label class="fl">Contraseña</label>
     <input class="fi" id="liPass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
-    <label class="fl">Rol</label>
-    <div class="rr">
-      <button class="rb sel" id="rA" onclick="pickRole('admin')">🔑 Administrador</button>
-      <button class="rb" id="rO" onclick="pickRole('operador')">👷 Operador</button>
-    </div>
+
     <button class="btn-l" onclick="doLogin()">Iniciar sesión</button>
     <div class="le" id="loginErr"></div>
     <div class="fs"><span class="fsd" id="fbDot"></span><span id="fbTxt">Conectando con Firebase...</span></div>
@@ -345,6 +362,39 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div class="ac" onclick="resetStock()"><div class="ac-i">🔄</div><div class="ac-l">Reset stock</div><div class="ac-s">Volver a inicial</div></div>
       <div class="ac" onclick="abrirCargaExcel()" style="border-color:rgba(0,230,118,.3)"><div class="ac-i">📥</div><div class="ac-l">Cargar Excel</div><div class="ac-s">Reemplazar inventario</div></div>
     </div>
+    <div class="sh">Usuarios IMS</div>
+    <div class="card" style="padding:.9rem">
+      <h3 style="font-size:.8rem;margin-bottom:8px">👥 Usuarios (<span id="ims-user-count">0</span>)</h3>
+      <div id="ims-user-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:10px"></div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:.72rem">
+          <thead><tr>
+            <th style="background:var(--bg3);color:var(--text2);font-size:.6rem;padding:6px 8px;text-align:left">Correo</th>
+            <th style="background:var(--bg3);color:var(--text2);font-size:.6rem;padding:6px 8px;text-align:left">Nombre</th>
+            <th style="background:var(--bg3);color:var(--text2);font-size:.6rem;padding:6px 8px;text-align:left">Rol</th>
+            <th style="background:var(--bg3);color:var(--text2);font-size:.6rem;padding:6px 8px;text-align:left">Estado</th>
+            <th style="background:var(--bg3);color:var(--text2);font-size:.6rem;padding:6px 8px;text-align:left">Acciones</th>
+          </tr></thead>
+          <tbody id="ims-users-table"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" style="padding:.9rem;margin-top:8px">
+      <h3 style="font-size:.8rem;margin-bottom:8px">➕ Agregar usuario</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+        <input class="ref-in" id="nuEmail" placeholder="correo@ejemplo.com" type="email" style="margin:0">
+        <input class="ref-in" id="nuNombre" placeholder="Nombre completo" style="margin:0">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+        <input class="ref-in" id="nuPass" placeholder="Contraseña (mín. 6)" type="password" style="margin:0">
+        <select class="loc-sel" id="nuRol" style="margin:0">
+          <option value="admin">Admin</option>
+          <option value="operador" selected>Operador</option>
+          <option value="viewer">Viewer</option>
+        </select>
+      </div>
+      <button class="btn-conf bc-E" onclick="addImsUser()">+ Agregar usuario</button>
+    </div>
     <div class="sh">Firebase</div>
     <div class="card">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem">
@@ -387,7 +437,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div class="bnav">
     <button class="bni on" onclick="goPage('pgDash',this)"><span class="bni-i">📊</span>Dash</button>
     <button class="bni" onclick="goPage('pgInv',this)"><span class="bni-i">📦</span>Inv.</button>
-    <button class="bni" onclick="goPage('pgMov',this)"><span class="bni-i">🔄</span>Mov.</button>
+    <button class="bni" id="navMov" onclick="goPage('pgMov',this)"><span class="bni-i">🔄</span>Mov.</button>
     <button class="bni" onclick="goPage('pgTraz',this)"><span class="bni-i">🗺️</span>Traz.</button>
     <button class="bni" onclick="goPage('pgQR',this)"><span class="bni-i">📷</span>QR</button>
     <button class="bni" onclick="goPage('pgHist',this)"><span class="bni-i">📋</span>Hist.</button>
@@ -611,29 +661,63 @@ async function pushMov(mov) {
 }
 
 // ── AUTH ──
-function pickRole(r) {
-  selRole = r;
-  document.getElementById('rA').classList.toggle('sel', r==='admin');
-  document.getElementById('rO').classList.toggle('sel', r==='operador');
+
+
+function checkViewerPass() {
+  const pass = document.getElementById('viewerPass').value;
+  const err = document.getElementById('viewerErr');
+  if (pass === 'Ims2026!') {
+    sessionStorage.setItem('ims-viewer-auth','1');
+    document.getElementById('viewerScreen').style.display = 'none';
+    user = {email:'viewer@ims', name:'Viewer', role:'viewer'};
+    localStorage.setItem('ims4_user', JSON.stringify(user));
+    launch();
+  } else {
+    err.style.display = 'block';
+    document.getElementById('viewerPass').value = '';
+    setTimeout(()=>err.style.display='none', 3000);
+  }
 }
+window.checkViewerPass = checkViewerPass;
+
+function showLogin() {
+  document.getElementById('viewerScreen').style.display = 'none';
+  document.getElementById('viewerScreen').style.display = 'flex';
+  document.getElementById('loginScreen').style.display = 'none';
+}
+window.showLogin = showLogin;
 
 async function doLogin() {
-  const e = document.getElementById('liEmail').value.trim();
+  const e = document.getElementById('liEmail').value.trim().toLowerCase();
   const p = document.getElementById('liPass').value;
   const err = document.getElementById('loginErr');
   if (!e || !p) { err.textContent = 'Ingresa correo y contraseña'; return; }
-  err.textContent = '';
+  err.textContent = 'Verificando...';
   if (auth) {
     try {
       await auth.signInWithEmailAndPassword(e, p);
     } catch(ex) {
-      if (ex.code==='auth/wrong-password'||ex.code==='auth/user-not-found'||ex.code==='auth/invalid-credential') {
-        err.textContent = 'Correo o contraseña incorrectos'; return;
-      }
+      err.textContent = 'Correo o contraseña incorrectos'; return;
     }
   }
-  user = {email:e, name:e.split('@')[0], role:selRole};
+  // Leer rol desde Firestore colección ims_usuarios
+  let role = 'viewer'; // default
+  let nombre = e.split('@')[0];
+  if (db) {
+    try {
+      const snap = await db.collection('ims_usuarios').where('email','==',e).get();
+      if (!snap.empty) {
+        const u = snap.docs[0].data();
+        role = u.role || u.rol || 'viewer';
+        nombre = u.nombre || nombre;
+      } else {
+        err.textContent = 'Usuario no registrado. Contacta al administrador.'; return;
+      }
+    } catch(ex) { console.error('Error leyendo usuario:', ex); }
+  }
+  user = {email:e, name:nombre, role};
   localStorage.setItem('ims4_user', JSON.stringify(user));
+  err.textContent = '';
   launch();
 }
 
@@ -642,18 +726,24 @@ function doLogout() {
   if (unsub) unsub();
   localStorage.removeItem('ims4_user');
   document.getElementById('app').style.display = 'none';
-  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('viewerScreen').style.display = 'flex';
+  document.getElementById('loginScreen').style.display = 'none';
 }
 
 function launch() {
   document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('viewerScreen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('uAv').textContent = user.name.slice(0,2).toUpperCase();
   document.getElementById('uNm').textContent = user.name;
   const rb = document.getElementById('uRl');
-  rb.textContent = user.role==='admin'?'Admin':'Operador';
-  rb.className = 'ur '+(user.role==='admin'?'ra':'ro');
+  rb.textContent = user.role==='admin'?'Admin':user.role==='operador'?'Operador':'Viewer';
+  rb.className = 'ur '+(user.role==='admin'?'ra':user.role==='operador'?'ro':'rv');
   document.getElementById('navAdmin').style.display = user.role==='admin'?'flex':'none';
+  if(user.role==='admin') setTimeout(loadImsUsers, 500);
+  // Ocultar módulo de movimientos para viewers
+  const navMov = document.getElementById('navMov');
+  if(navMov) navMov.style.display = user.role==='viewer'?'none':'flex';
   document.getElementById('tbDate').textContent = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'});
   startSync();
   loadFromFirestore();
@@ -670,7 +760,7 @@ function goPage(id, btn) {
   document.querySelectorAll('.bni').forEach(b=>b.classList.remove('on'));
   document.getElementById(id).classList.add('active');
   btn.classList.add('on');
-  if (id==='pgAdmin') buildAdmin();
+  if (id==='pgAdmin') { buildAdmin(); if(user&&user.role==='admin') loadImsUsers(); }
 }
 
 // ── DASHBOARD ──
@@ -778,6 +868,7 @@ function selForMov(idx) {
 function adjQ(d) { const inp=document.getElementById('mfQty'); inp.value=Math.max(1,(parseInt(inp.value)||0)+d); }
 
 async function doMov() {
+  if (user && user.role === 'viewer') { toast('Solo lectura — sin permisos para movimientos','err'); return; }
   if (selIdx===null) { toast('Selecciona un Part Number','err'); return; }
   const qty = parseInt(document.getElementById('mfQty').value)||0;
   if (qty<=0) { toast('Cantidad inválida','err'); return; }
@@ -998,6 +1089,73 @@ function movHTML(m) {
 }
 
 // ── ADMIN ──
+async function loadImsUsers() {
+  if (!db) return;
+  try {
+    const snap = await db.collection('ims_usuarios').get();
+    const IMS_USUARIOS = snap.docs.map(d=>({docId:d.id,...d.data()}));
+    const total=IMS_USUARIOS.length, activos=IMS_USUARIOS.filter(u=>u.activo!==false).length;
+    const byRol=r=>IMS_USUARIOS.filter(u=>(u.role||u.rol)===r).length;
+    const countEl=document.getElementById('ims-user-count');
+    if(countEl) countEl.textContent=total;
+    const stats=document.getElementById('ims-user-stats');
+    if(stats) stats.innerHTML=[
+      ['Total',total,'var(--accent)'],['Activos',activos,'var(--green)'],
+      ['Admins',byRol('admin'),'#9b59b6'],['Viewers',byRol('viewer'),'#e67e22']
+    ].map(([l,v,col])=>`<div style="background:var(--bg3);border-radius:7px;padding:7px;text-align:center"><div style="font-size:1rem;font-weight:700;color:${col}">${v}</div><div style="font-size:.6rem;color:var(--text2)">${l}</div></div>`).join('');
+    const tb=document.getElementById('ims-users-table');
+    if(!tb) return;
+    tb.innerHTML='';
+    if(IMS_USUARIOS.length===0){tb.innerHTML='<tr><td colspan="5" style="text-align:center;padding:12px;color:var(--text2)">Sin usuarios registrados</td></tr>';return;}
+    IMS_USUARIOS.forEach(u=>{
+      const role=u.role||u.rol||'viewer';
+      const rolColor=role==='admin'?'#9b59b6':role==='operador'?'#2ecc71':'#e67e22';
+      const activo=u.activo!==false;
+      const isMe=u.email===user?.email;
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td style="font-size:.65rem;padding:6px 8px;border-bottom:1px solid var(--border2)">${u.email}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid var(--border2)"><strong>${u.nombre||'—'}</strong></td>
+        <td style="padding:6px 8px;border-bottom:1px solid var(--border2)"><span style="font-size:.6rem;background:${rolColor}22;color:${rolColor};padding:2px 8px;border-radius:20px;font-weight:600">${role}</span></td>
+        <td style="padding:6px 8px;border-bottom:1px solid var(--border2)"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${activo?'var(--green)':'var(--red)'};margin-right:4px"></span>${activo?'Activo':'Inactivo'}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid var(--border2)">${isMe?'<span style="font-size:.65rem;color:var(--text2)">Tú</span>':
+          `<button onclick="toggleImsUser('${u.docId}',${activo})" style="border:1px solid var(--border2);background:var(--bg3);color:var(--text);border-radius:5px;padding:3px 8px;font-size:.65rem;cursor:pointer;margin-right:3px">${activo?'Desactivar':'Activar'}</button>
+           <button onclick="deleteImsUser('${u.docId}','${u.nombre||u.email}')" style="border:1px solid var(--red);background:transparent;color:var(--red);border-radius:5px;padding:3px 8px;font-size:.65rem;cursor:pointer">✕</button>`}</td>`;
+      tb.appendChild(tr);
+    });
+  } catch(e) { console.error('loadImsUsers:',e); }
+}
+window.loadImsUsers = loadImsUsers;
+
+async function addImsUser() {
+  const email=document.getElementById('nuEmail').value.trim().toLowerCase();
+  const nombre=document.getElementById('nuNombre').value.trim();
+  const pass=document.getElementById('nuPass')?document.getElementById('nuPass').value:'';
+  const role=document.getElementById('nuRol').value;
+  if(!email||!nombre){toast('Ingresa email y nombre','err');return;}
+  if(!db){toast('Sin Firebase','err');return;}
+  try {
+    await db.collection('ims_usuarios').add({email,nombre,role,activo:true,createdAt:new Date().toISOString()});
+    ['nuEmail','nuNombre'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    const passEl=document.getElementById('nuPass');if(passEl)passEl.value='';
+    toast('✅ Usuario agregado. Crea sus credenciales en Firebase → Authentication.','ok');
+    loadImsUsers();
+  } catch(e){toast('Error: '+e.message,'err');}
+}
+window.addImsUser = addImsUser;
+
+async function toggleImsUser(id,activo) {
+  await db.collection('ims_usuarios').doc(id).update({activo:!activo});
+  toast('Usuario actualizado','ok'); loadImsUsers();
+}
+window.toggleImsUser = toggleImsUser;
+
+async function deleteImsUser(id,nombre) {
+  if(!confirm('¿Eliminar perfil de "'+nombre+'"?'))return;
+  await db.collection('ims_usuarios').doc(id).delete();
+  toast('Usuario eliminado','ok'); loadImsUsers();
+}
+window.deleteImsUser = deleteImsUser;
+
 function buildAdmin() {
   const tb = document.getElementById('pendBody');
   if (!tb) return;
