@@ -77,7 +77,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .fb90{background:linear-gradient(90deg,#c47800,#ffb300)}
 .fi2{font-size:9px;color:var(--text);text-align:right;min-width:70px}
 .sw{position:relative;margin-bottom:.7rem}
-.si{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:9px;padding:10px 38px 10px 13px;color:var(--text);font-size:13px;outline:none;font-family:'DM Sans',sans-serif;transition:border .2s}
+.si{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:9px;padding:10px 38px 10px 13px;color:var(--text);font-size:13px;outline:none;font-family:'DM Sans',sans-serif;transition:border .2s;text-transform:uppercase}
 .si:focus{border-color:var(--accent)}
 .si-ic{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:14px}
 .ftabs{display:flex;gap:5px;margin-bottom:.7rem;overflow-x:auto;padding-bottom:2px}
@@ -250,13 +250,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   </div>
 
   <div id="pgInv" class="page">
-    <div class="sw"><input class="si" id="invS" placeholder="Buscar Part Number..." oninput="renderInv()"><span class="si-ic">🔍</span></div>
-    <div class="ftabs">
-      <div class="ft on" onclick="setFam('TODOS',this)">Todos</div>
-      <div class="ft" onclick="setFam('GH68',this)">GH68</div>
-      <div class="ft" onclick="setFam('GH69',this)">GH69</div>
-      <div class="ft" onclick="setFam('GH90',this)">GH90</div>
-      <div class="ft" onclick="setFam('Pendiente',this)">⚠️ Pend.</div>
+    <div class="sw"><input class="si" id="invS" style="text-transform:uppercase" placeholder="Buscar Part Number..." oninput="this.value=this.value.toUpperCase();renderInv()" ><span class="si-ic">🔍</span></div>
+    <div class="ftabs" style="justify-content:space-between;align-items:center">
+      <div style="display:flex;gap:5px;flex-wrap:wrap">
+        <div class="ft on" onclick="setFam('TODOS',this)">Todos</div>
+        <div class="ft" onclick="setFam('GH68',this)">GH68</div>
+        <div class="ft" onclick="setFam('GH69',this)">GH69</div>
+        <div class="ft" onclick="setFam('GH90',this)">GH90</div>
+        <div class="ft" onclick="setFam('Pendiente',this)">⚠️ Pend.</div>
+      </div>
+      <button onclick="exportExcel()" style="background:var(--green2);color:#fff;border:none;border-radius:7px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:'DM Sans',sans-serif">↓ Excel</button>
     </div>
     <div id="invList"></div>
   </div>
@@ -283,7 +286,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         <div style="font-size:10px;opacity:.6;margin-top:2px">Toca para activar la cámara</div>
       </div>
     </div>
-    <div class="sw"><input class="si" id="movS" placeholder="O busca el Part Number..." oninput="renderMovList()"><span class="si-ic">🔍</span></div>
+    <div class="sw"><input class="si" id="movS" style="text-transform:uppercase" placeholder="O busca el Part Number..." oninput="this.value=this.value.toUpperCase();renderMovList()" ><span class="si-ic">🔍</span></div>
     <div id="movList" style="max-height:160px;overflow-y:auto;margin-bottom:.7rem"></div>
     <div class="mf" id="movForm">
       <div class="mf-tipo" id="mfTipo">ENTRADA</div>
@@ -311,13 +314,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
           <option value="Producción Terminada">🎯 Prod. Terminada</option>
         </select>
       </div>
-      <input class="ref-in" id="mfRef" placeholder="Referencia / OC (opcional)">
+      <input class="ref-in" id="mfRef" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase" placeholder="Referencia / OC (opcional)">
       <button class="btn-conf" id="mfBtn" onclick="doMov()">✓ CONFIRMAR</button>
     </div>
   </div>
 
   <div id="pgTraz" class="page">
-    <div class="sw"><input class="si" id="trazS" placeholder="Buscar Part Number para rastrear..." oninput="renderTraz()"><span class="si-ic">🔍</span></div>
+    <div class="sw"><input class="si" id="trazS" style="text-transform:uppercase" placeholder="Buscar Part Number para rastrear..." oninput="this.value=this.value.toUpperCase();renderTraz()" ><span class="si-ic">🔍</span></div>
     <div id="trazResult"><div class="empty">🗺️<br>Escribe un Part Number para rastrear</div></div>
     <div class="sh">Mapa de planta</div>
     <div class="lg" id="locMap"></div>
@@ -325,7 +328,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 
   <div id="pgQR" class="page">
     <div class="sh">Generar código QR</div>
-    <div class="sw"><input class="si" id="qrS" placeholder="Buscar Part Number..." oninput="renderQRList()"><span class="si-ic">🔍</span></div>
+    <div class="sw"><input class="si" id="qrS" style="text-transform:uppercase" placeholder="Buscar Part Number..." oninput="this.value=this.value.toUpperCase();renderQRList()" ><span class="si-ic">🔍</span></div>
     <div id="qrList" style="max-height:200px;overflow-y:auto;margin-bottom:.8rem"></div>
     <div class="qr-center" id="qrCenter">
       <div style="text-align:center">
@@ -347,7 +350,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div class="ft" onclick="setHistF('S',this)">⬆️ Salidas</div>
       <div class="ft" onclick="setHistF('T',this)">🔀 Traslados</div>
     </div>
-    <div class="sw"><input class="si" id="histS" placeholder="Buscar por PN..." oninput="renderHist()"><span class="si-ic">🔍</span></div>
+    <div class="sw"><input class="si" id="histS" style="text-transform:uppercase" placeholder="Buscar por PN..." oninput="this.value=this.value.toUpperCase();renderHist()" ><span class="si-ic">🔍</span></div>
     <div id="histList"></div>
   </div>
 
@@ -383,7 +386,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <h3 style="font-size:.8rem;margin-bottom:8px">➕ Agregar usuario</h3>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
         <input class="ref-in" id="nuEmail" placeholder="correo@ejemplo.com" type="email" style="margin:0">
-        <input class="ref-in" id="nuNombre" placeholder="Nombre completo" style="margin:0">
+        <input class="ref-in" id="nuNombre" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase;margin:0" placeholder="NOMBRE COMPLETO">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
         <input class="ref-in" id="nuPass" placeholder="Contraseña (mín. 6)" type="password" style="margin:0">
@@ -422,7 +425,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       </div>
       <div style="margin-bottom:.6rem">
         <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Ubicación</div>
-        <input id="npUb" class="ref-in" placeholder="Almacén" style="margin:0" value="Almacén">
+        <input id="npUb" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase;margin:0" class="ref-in" placeholder="ALMACÉN" value="Almacén">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.8rem">
         <div><div style="font-size:10px;color:var(--text2);margin-bottom:3px">Stock inicial</div><input id="npS" class="ref-in" type="number" placeholder="0" style="margin:0"></div>
@@ -590,6 +593,43 @@ function saveLocal() {
   localStorage.setItem('ims4_movs', JSON.stringify(movs));
 }
 
+function openEdit(idx) {
+  if (!user || (user.role !== 'admin' && user.role !== 'operador')) { toast('Sin permiso','err'); return; }
+  window._editIdx = idx;
+  const i = items[idx];
+  document.getElementById('editPN').value = i.pn;
+  document.getElementById('editDesc').value = i.desc || '';
+  document.getElementById('editFam').value = i.familia || 'Otro';
+  document.getElementById('modalEdit').style.display = 'flex';
+}
+window.openEdit = openEdit;
+function closeEdit() { document.getElementById('modalEdit').style.display = 'none'; }
+window.closeEdit = closeEdit;
+async function saveEdit() {
+  const idx = window._editIdx;
+  if (idx === undefined || idx === null) return;
+  const newPN = document.getElementById('editPN').value.trim().toUpperCase();
+  const newDesc = document.getElementById('editDesc').value.trim().toUpperCase();
+  const newFam = document.getElementById('editFam').value;
+  if (!newPN) { toast('Part Number requerido','err'); return; }
+  const oldItem = items[idx];
+  items[idx] = { ...oldItem, pn: newPN, desc: newDesc, familia: newFam };
+  saveLocal();
+  if (db) {
+    try {
+      const oldDocId = getDocId(oldItem.pn, oldItem.desc);
+      const newDocId = getDocId(newPN, newDesc);
+      if (oldDocId !== newDocId) {
+        await db.collection('planta4_inventario').doc(oldDocId).delete();
+      }
+      await db.collection('planta4_inventario').doc(newDocId).set(items[idx], {merge:true});
+    } catch(e) { console.error('saveEdit Firestore:', e); }
+  }
+  closeEdit();
+  renderInv(); updateDash(); updatePNList();
+  toast('✅ Parte actualizada','ok');
+}
+window.saveEdit = saveEdit;
 // ── FIREBASE ──
 function initFirebase() {
   try {
@@ -682,8 +722,8 @@ window.checkViewerPass = checkViewerPass;
 
 function showLogin() {
   document.getElementById('viewerScreen').style.display = 'none';
-  document.getElementById('viewerScreen').style.display = 'flex';
-  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
 }
 window.showLogin = showLogin;
 
@@ -752,7 +792,13 @@ function launch() {
 
 // init on load
 initFirebase();
-if (user) launch();
+if (user) {
+  launch();
+} else {
+  document.getElementById('viewerScreen').style.display = 'flex';
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+}
 
 // ── NAVIGATION ──
 function goPage(id, btn) {
@@ -806,7 +852,7 @@ function renderInv() {
   if (!f.length) { el.innerHTML='<div class="empty">📦<br>Sin resultados</div>'; return; }
   el.innerHTML = f.slice(0,80).map(item=>{
     const idx = items.indexOf(item);
-    return '<div class="ir" onclick="openItem('+idx+')"><div style="flex:1;min-width:0"><div class="ir-pn">'+item.pn+'</div><div class="ir-d">'+item.desc+'</div><div class="ir-tags"><span class="pill '+(item.estatus==='DONE'?'pd':'pp')+'">'+item.estatus+'</span><span class="pill pl">📍'+( item.ubicacion||'Almacén')+'</span></div></div><div style="text-align:right;flex-shrink:0"><div class="ir-s" style="color:'+(item.actual>0?'var(--accent)':'var(--text2)')+'">'+item.actual.toLocaleString()+'</div><div style="font-size:9px;color:var(--text2)">'+item.familia+'</div></div></div>';
+    var canEdit=user&&(user.role==='admin'||user.role==='operador'); return '<div class="ir" style="display:flex;align-items:center"><div onclick="openItem('+idx+')" style="flex:1;min-width:0;cursor:pointer"><div class="ir-pn">'+item.pn+'</div><div class="ir-d">'+item.desc+'</div><div class="ir-tags"><span class="pill '+(item.estatus==="DONE"?"pd":"pp")+'">'+item.estatus+'</span><span class="pill pl">📍'+(item.ubicacion||'Almacén')+'</span></div></div><div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="ir-s" style="color:'+(item.actual>0?'var(--accent)':'var(--text2)')+'">'+item.actual.toLocaleString()+'</div><div style="font-size:9px;color:var(--text2)">'+item.familia+'</div>'+(canEdit?'<button onclick="event.stopPropagation();openEdit('+idx+')" style="background:rgba(77,166,255,.15);border:1px solid rgba(77,166,255,.3);border-radius:6px;color:var(--accent);font-size:11px;padding:2px 8px;cursor:pointer">Editar</button>':'')+'</div></div>';
   }).join('') + (f.length>80?'<div class="empty">+'+( f.length-80)+' más</div>':'');
 }
 
@@ -1369,5 +1415,6 @@ function xlsConfirmar(){
   }
 }
 </script>
+<div id="modalEdit" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:700;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)"><div style="background:var(--bg2);border-radius:18px 18px 0 0;padding:1.5rem 1.2rem;width:100%;max-width:500px;border-top:1px solid var(--border2)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem"><span style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700">Editar Parte</span><button onclick="closeEdit()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer">X</button></div><label class="fl">Part Number</label><input class="fi" id="editPN" type="text" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase;font-family:monospace"><label class="fl">Descripcion</label><input class="fi" id="editDesc" type="text" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase"><label class="fl">Familia</label><select class="fi" id="editFam"><option value="GH68">GH68</option><option value="GH69">GH69</option><option value="GH90">GH90</option><option value="Otro">Otro</option></select><div style="display:flex;gap:8px;margin-top:.5rem"><button onclick="closeEdit()" style="flex:1;padding:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-size:13px;cursor:pointer">Cancelar</button><button onclick="saveEdit()" style="flex:1;padding:12px;background:var(--accent2);border:none;border-radius:9px;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Guardar</button></div></div></div>
 </body>
 </html>
