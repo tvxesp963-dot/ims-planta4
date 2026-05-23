@@ -354,6 +354,27 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <div id="histList"></div>
   </div>
 
+<div id="pgPlan" class="page">
+  <div id="planEmpty" style="padding:3rem;text-align:center;color:var(--text2)">
+    <div style="font-size:40px;margin-bottom:1rem">📋</div>
+    <div style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:var(--text);margin-bottom:.5rem">Sin plan activo</div>
+    <div style="font-size:13px;margin-bottom:1rem">El supervisor debe publicar el plan desde el BOM Simulator</div>
+  </div>
+  <div id="planContent" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+      <div>
+        <div style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;color:var(--text)" id="planTitulo">Plan de Producción</div>
+        <div style="font-size:11px;color:var(--text2)" id="planFecha"></div>
+      </div>
+      <div style="display:flex;gap:.5rem">
+        <button class="btn btn-secondary btn-sm" onclick="imprimirOrden()">🖨 Imprimir</button>
+        <button class="btn btn-primary btn-sm" onclick="loadPlan()">🔄 Actualizar</button>
+      </div>
+    </div>
+    <div id="planLineas"></div>
+  </div>
+</div>
+
   <div id="pgAdmin" class="page">
     <div class="sh">Administración</div>
     <div class="ag">
@@ -444,6 +465,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <button class="bni" onclick="goPage('pgTraz',this)"><span class="bni-i">🗺️</span>Traz.</button>
     <button class="bni" onclick="goPage('pgQR',this)"><span class="bni-i">📷</span>QR</button>
     <button class="bni" onclick="goPage('pgHist',this)"><span class="bni-i">📋</span>Hist.</button>
+    <button class="bni" id="navPlan" onclick="goPage('pgPlan',this)"><span class="bni-i">📋</span>Plan</button>
     <button class="bni" id="navAdmin" onclick="goPage('pgAdmin',this)"><span class="bni-i">⚙️</span>Admin</button>
   </div>
 </div>
@@ -807,6 +829,7 @@ function goPage(id, btn) {
   document.getElementById(id).classList.add('active');
   btn.classList.add('on');
   if (id==='pgAdmin') { buildAdmin(); if(user&&user.role==='admin') loadImsUsers(); }
+  if (id==='pgPlan') { loadPlan(); }
 }
 
 // ── DASHBOARD ──
@@ -1215,6 +1238,111 @@ function exportCSV() {
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='IMS_'+new Date().toISOString().split('T')[0]+'.csv';a.click();
   toast('✅ CSV descargado','ok');
 }
+
+// ── ORDEN DE PREPARACIÓN (IMS) ──
+var planActivo = null;
+
+async function loadPlan() {
+  if (!db) return;
+  try {
+    const doc = await db.collection('plan_produccion').doc('plan_activo').get();
+    if (!doc.exists) {
+      document.getElementById('planEmpty').style.display = 'block';
+      document.getElementById('planContent').style.display = 'none';
+      return;
+    }
+    planActivo = doc.data();
+    renderPlanIMS();
+  } catch(e) { console.log('loadPlan:', e.message); }
+}
+
+function renderPlanIMS() {
+  if (!planActivo) return;
+  document.getElementById('planEmpty').style.display = 'none';
+  document.getElementById('planContent').style.display = 'block';
+  document.getElementById('planTitulo').textContent = 'Orden de Preparación — ' + (planActivo.semana||'');
+  document.getElementById('planFecha').textContent = 'Publicado: ' + new Date(planActivo.publicadoEn).toLocaleString('es-MX');
+
+  const colores = {
+    'VC':'var(--amber)', 'S1/S2':'var(--accent)', 'Zhongke':'var(--accent)',
+    'S3':'#00B8A0', 'S4':'#7C5CBF', 'ASSY1':'var(--green)'
+  };
+  const iconos = {'VC':'⚙️','S1/S2':'🏭','Zhongke':'🤖','S3':'🏭','S4':'🏭','ASSY1':'✅'};
+
+  let html = '';
+  const lineas = planActivo.lineas || {};
+  // Orden de visualización
+  const ordenLineas = ['VC','S1/S2','Zhongke','S3','S4','ASSY1'];
+  const todasLineas = [...ordenLineas, ...Object.keys(lineas).filter(k=>!ordenLineas.includes(k))];
+  todasLineas.forEach(linea => {
+    const lineaData = lineas[linea];
+    if (!lineaData) return;
+    const items = Array.isArray(lineaData) ? lineaData : [lineaData];
+    const color = colores[linea] || 'var(--text2)';
+    const icon = iconos[linea] || '📦';
+    items.forEach((l, idx) => {
+      if (!l) return;
+      const mats = l.materiales || [];
+      const listo = l.listo||false;
+      const key = linea + '_' + idx;
+      if (!mats.length && (l.cantidad||0) === 0) return;
+      html += `
+      <div style="background:var(--bg2);border:1px solid ${listo?'rgba(0,184,90,.3)':color+'40'};border-radius:12px;margin-bottom:.6rem;overflow:hidden">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:.6rem 1rem;background:${listo?'rgba(0,184,90,.08)':color+'12'};border-bottom:1px solid ${color}30">
+          <div style="display:flex;align-items:center;gap:.5rem">
+            <span style="font-size:14px">${icon}</span>
+            <span style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:${listo?'var(--green)':color}">${linea}</span>
+            <span style="font-size:11px;color:var(--text2)">· ${l.sm||l.modelo||''} · ${(l.cantidad||0).toLocaleString()} pzas</span>
+          </div>
+          <span style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:${listo?'rgba(0,184,90,.15)':'rgba(255,179,0,.1)'};color:${listo?'var(--green)':'var(--amber)'}">
+            ${listo?'✓ Material listo':'⏳ Pendiente'}
+          </span>
+        </div>
+        <div style="padding:.6rem 1rem">
+          ${mats.map(m=>`
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px">
+            <div>
+              <span style="font-family:Rajdhani,sans-serif;color:${color};font-weight:600">${m.pn||''}</span>
+              <span style="color:var(--text2);margin-left:.5rem">${m.desc||''}</span>
+            </div>
+            <span style="font-weight:600;color:var(--text)">${(m.cant||0).toLocaleString()} pzas</span>
+          </div>`).join('')}
+        </div>
+      </div>`;
+    });
+  });
+
+  document.getElementById('planLineas').innerHTML = html || '<div style="color:var(--text2);text-align:center;padding:2rem">Sin materiales en el plan</div>';
+}
+
+function imprimirOrden() {
+  if (!planActivo) return;
+  const el = document.getElementById('planLineas');
+  const w = window.open('','_blank','width=900,height=700');
+  w.document.write(`<!DOCTYPE html><html><head><title>Orden de Preparación</title>
+    <style>body{font-family:Arial,sans-serif;padding:20px;color:#111}
+    h2{margin-bottom:4px}h4{color:#555;margin:0 0 12px}
+    table{width:100%;border-collapse:collapse;margin-bottom:16px}
+    th,td{border:1px solid #ddd;padding:6px 10px;text-align:left;font-size:12px}
+    th{background:#f0f0f0;font-weight:600}.linea-hdr{background:#1a6fd4;color:#fff;padding:8px 12px;border-radius:6px;margin:16px 0 6px;font-weight:700}
+    button{display:none}@media print{button{display:none}}</style></head>
+    <body>
+    <h2>Orden de Preparación — ${planActivo.semana||''}</h2>
+    <h4>Fecha: ${new Date(planActivo.publicadoEn).toLocaleString('es-MX')}</h4>
+    ${Object.keys(planActivo.lineas||{}).map(linea=>{
+      const l = planActivo.lineas[linea];
+      if (!l||!l.materiales||!l.materiales.length) return '';
+      return `<div class="linea-hdr">${linea} — ${l.modelo||''} · ${(l.cantidad||0).toLocaleString()} pzas</div>
+      <table><thead><tr><th>N° Parte</th><th>Descripción</th><th>Cantidad</th><th>Recibido ✓</th></tr></thead>
+      <tbody>${l.materiales.map(m=>`<tr><td>${m.pn}</td><td>${m.desc}</td><td>${(m.cant||0).toLocaleString()}</td><td></td></tr>`).join('')}</tbody></table>`;
+    }).join('')}
+    </body></html>`);
+  w.document.close();
+  w.print();
+}
+window.loadPlan = loadPlan;
+window.imprimirOrden = imprimirOrden;
+
 function showKPIs() {
   const tot=items.reduce((s,i)=>s+i.actual,0);
   const val=items.reduce((s,i)=>s+(i.actual*i.precio),0);
@@ -1416,5 +1544,6 @@ function xlsConfirmar(){
 }
 </script>
 <div id="modalEdit" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:700;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)"><div style="background:var(--bg2);border-radius:18px 18px 0 0;padding:1.5rem 1.2rem;width:100%;max-width:500px;border-top:1px solid var(--border2)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem"><span style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700">Editar Parte</span><button onclick="closeEdit()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer">X</button></div><label class="fl">Part Number</label><input class="fi" id="editPN" type="text" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase;font-family:monospace"><label class="fl">Descripcion</label><input class="fi" id="editDesc" type="text" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase"><label class="fl">Familia</label><select class="fi" id="editFam"><option value="GH68">GH68</option><option value="GH69">GH69</option><option value="GH90">GH90</option><option value="Otro">Otro</option></select><div style="display:flex;gap:8px;margin-top:.5rem"><button onclick="closeEdit()" style="flex:1;padding:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-size:13px;cursor:pointer">Cancelar</button><button onclick="saveEdit()" style="flex:1;padding:12px;background:var(--accent2);border:none;border-radius:9px;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Guardar</button></div></div></div>
+
 </body>
 </html>
