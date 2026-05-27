@@ -895,8 +895,11 @@ function setFam(f,el) { invFam=f; document.querySelectorAll('#pgInv .ft').forEac
 function renderInv() {
   const q = document.getElementById('invS').value.toLowerCase();
   let f = items.filter(i=>{
-    if (invFam==='Pendiente') return i.estatus==='Pendiente';
-    if (invFam!=='TODOS'&&i.familia!==invFam) return false;
+    if (invFam==='Pendiente') {
+      if (i.estatus!=='Pendiente') return false;
+    } else if (invFam!=='TODOS' && i.familia!==invFam) {
+      return false;
+    }
     return !q||i.pn.toLowerCase().includes(q)||i.desc.toLowerCase().includes(q);
   });
   const el = document.getElementById('invList');
