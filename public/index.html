@@ -227,6 +227,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     </div>
     <div class="tb-r">
       <div class="lp"><div class="ld"></div>EN VIVO</div>
+      <button id="btnReload" onclick="recargarDesdeFirebase()" title="Recargar datos desde Firebase" style="background:rgba(77,166,255,.12);border:1px solid rgba(77,166,255,.3);color:var(--accent);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:600;cursor:pointer">🔄 Recargar</button>
       <div class="uc"><div class="ua" id="uAv">OA</div><span style="font-size:10px;color:var(--text2)" id="uNm">–</span><span class="ur" id="uRl">–</span></div>
       <button class="btn-out" onclick="doLogout()">⏻</button>
     </div>
@@ -701,17 +702,44 @@ function startSync() {
     .onSnapshot(snap => {
       snap.docChanges().forEach(change => {
         const fi = change.doc.data();
-        const idx = items.findIndex(i => i.pn === fi.pn && i.desc === fi.desc);
+        const docId = change.doc.id;
+        // Identificar por docId si ya viene marcado, o por pn+desc como fallback
+        let idx = items.findIndex(i => (i._docId && i._docId === docId) || (i.pn === fi.pn && i.desc === fi.desc));
         if (change.type === 'removed') {
           if (idx >= 0) items.splice(idx, 1);
         } else {
-          if (idx >= 0) { items[idx] = { ...items[idx], ...fi }; }
+          fi._docId = docId; // guardar docId para futuras búsquedas
+          if (idx >= 0) { items[idx] = { ...items[idx], ...fi, _docId: docId }; }
           else { items.push(fi); }
         }
       });
       saveLocal(); updateDash(); renderInv(); renderLocMap();
     }, () => {});
 }
+
+// ── RECARGAR DATOS DESDE FIREBASE (botón manual) ──
+async function recargarDesdeFirebase() {
+  if (!db) { toast('❌ Firebase no conectado', 'err'); return; }
+  var btn = document.getElementById('btnReload');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Recargando...'; }
+  try {
+    var snap = await db.collection('planta4_inventario').get();
+    var nuevos = [];
+    snap.forEach(function(d){ var data = d.data(); data._docId = d.id; nuevos.push(data); });
+    items = nuevos;
+    saveLocal();
+    updateDash();
+    renderInv();
+    renderLocMap();
+    if (typeof renderHist === 'function') renderHist();
+    toast('✅ Recargado · ' + items.length + ' partes', 'ok');
+  } catch(err) {
+    toast('❌ Error al recargar: ' + err.message, 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Recargar'; }
+  }
+}
+window.recargarDesdeFirebase = recargarDesdeFirebase;
 
 async function pushMov(mov) {
   if (!db) return;
@@ -867,11 +895,8 @@ function setFam(f,el) { invFam=f; document.querySelectorAll('#pgInv .ft').forEac
 function renderInv() {
   const q = document.getElementById('invS').value.toLowerCase();
   let f = items.filter(i=>{
-    if (invFam==='Pendiente') {
-      if (i.estatus!=='Pendiente') return false;
-    } else if (invFam!=='TODOS' && i.familia!==invFam) {
-      return false;
-    }
+    if (invFam==='Pendiente') return i.estatus==='Pendiente';
+    if (invFam!=='TODOS'&&i.familia!==invFam) return false;
     return !q||i.pn.toLowerCase().includes(q)||i.desc.toLowerCase().includes(q);
   });
   const el = document.getElementById('invList');
