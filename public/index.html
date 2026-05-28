@@ -1270,6 +1270,52 @@ function exportCSV() {
   toast('✅ CSV descargado','ok');
 }
 
+// Exporta a Excel (.xlsx) respetando el filtro y búsqueda actuales
+function exportExcel() {
+  if (typeof XLSX === 'undefined') { toast('❌ Librería Excel no cargada', 'err'); return; }
+  // Mismo filtro que renderInv (búsqueda + familia/Pendiente)
+  const q = (document.getElementById('invS').value||'').toLowerCase();
+  const filtrados = items.filter(function(i){
+    if (invFam==='Pendiente') {
+      if (i.estatus!=='Pendiente') return false;
+    } else if (invFam!=='TODOS' && i.familia!==invFam) {
+      return false;
+    }
+    return !q || (i.pn||'').toLowerCase().includes(q) || (i.desc||'').toLowerCase().includes(q);
+  });
+  if (!filtrados.length) { toast('No hay partes para exportar con el filtro actual', 'warn'); return; }
+
+  const rows = [['PN','Descripción','Familia','Inv. Inicial','Entradas','Salidas','Stock','Precio USD','Valor USD','Estatus','Ubicación']];
+  filtrados.forEach(function(i){
+    rows.push([
+      i.pn||'',
+      i.desc||'',
+      i.familia||'',
+      Number(i.inicial)||0,
+      Number(i.entradas)||0,
+      Number(i.salidas)||0,
+      Number(i.actual)||0,
+      Number(i.precio)||0,
+      +(((Number(i.actual)||0)*(Number(i.precio)||0)).toFixed(2)),
+      i.estatus||'',
+      i.ubicacion||'Almacén'
+    ]);
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  // Ancho de columnas
+  ws['!cols'] = [{wch:14},{wch:32},{wch:10},{wch:11},{wch:10},{wch:9},{wch:9},{wch:11},{wch:12},{wch:11},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
+
+  const filtroNombre = invFam==='TODOS'?'Todos':invFam;
+  const fecha = new Date().toISOString().split('T')[0];
+  const filename = 'IMS_'+filtroNombre+'_'+fecha+'.xlsx';
+  XLSX.writeFile(wb, filename);
+  toast('✅ Excel descargado · '+filtrados.length+' partes', 'ok');
+}
+window.exportExcel = exportExcel;
+
 // ── ORDEN DE PREPARACIÓN (IMS) ──
 var planActivo = null;
 
