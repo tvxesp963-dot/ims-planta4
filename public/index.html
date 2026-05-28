@@ -620,23 +620,80 @@ function openEdit(idx) {
   if (!user || (user.role !== 'admin' && user.role !== 'operador')) { toast('Sin permiso','err'); return; }
   window._editIdx = idx;
   const i = items[idx];
-  document.getElementById('editPN').value = i.pn;
+  document.getElementById('editPN').value = i.pn || '';
   document.getElementById('editDesc').value = i.desc || '';
   document.getElementById('editFam').value = i.familia || 'Otro';
+  document.getElementById('editInicial').value = Number(i.inicial)||0;
+  document.getElementById('editEntradas').value = Number(i.entradas)||0;
+  document.getElementById('editSalidas').value = Number(i.salidas)||0;
+  document.getElementById('editPrecio').value = Number(i.precio)||0;
+  document.getElementById('editEstatus').value = i.estatus || 'DONE';
+  document.getElementById('editUbic').value = i.ubicacion || 'Almacén';
+  _editRecalcStock();
   document.getElementById('modalEdit').style.display = 'flex';
 }
 window.openEdit = openEdit;
+
+function _editRecalcStock() {
+  var ini = parseFloat(document.getElementById('editInicial').value)||0;
+  var ent = parseFloat(document.getElementById('editEntradas').value)||0;
+  var sal = parseFloat(document.getElementById('editSalidas').value)||0;
+  var stock = ini + ent - sal;
+  var el = document.getElementById('editStockCalc');
+  if (el) {
+    el.textContent = stock.toLocaleString() + ' pzas';
+    el.style.color = stock < 0 ? '#ff6b6b' : stock === 0 ? '#FFBA00' : '#4DA6FF';
+  }
+}
+window._editRecalcStock = _editRecalcStock;
+
 function closeEdit() { document.getElementById('modalEdit').style.display = 'none'; }
 window.closeEdit = closeEdit;
+
 async function saveEdit() {
   const idx = window._editIdx;
   if (idx === undefined || idx === null) return;
   const newPN = document.getElementById('editPN').value.trim().toUpperCase();
   const newDesc = document.getElementById('editDesc').value.trim().toUpperCase();
   const newFam = document.getElementById('editFam').value;
+  const newIni = Math.round(parseFloat(document.getElementById('editInicial').value)||0);
+  const newEnt = Math.round(parseFloat(document.getElementById('editEntradas').value)||0);
+  const newSal = Math.round(parseFloat(document.getElementById('editSalidas').value)||0);
+  const newPrecio = parseFloat(document.getElementById('editPrecio').value)||0;
+  const newEstatus = document.getElementById('editEstatus').value;
+  const newUbic = document.getElementById('editUbic').value.trim() || 'Almacén';
   if (!newPN) { toast('Part Number requerido','err'); return; }
+  const newStock = newIni + newEnt - newSal;
+  if (newStock < 0) { if (!confirm('Stock calculado es negativo ('+newStock+'). ¿Continuar?')) return; }
+
   const oldItem = items[idx];
-  items[idx] = { ...oldItem, pn: newPN, desc: newDesc, familia: newFam };
+  // Detectar cambios numéricos para historial
+  var cambios = [];
+  if ((Number(oldItem.inicial)||0) !== newIni) cambios.push('inicial: '+(oldItem.inicial||0)+'→'+newIni);
+  if ((Number(oldItem.entradas)||0) !== newEnt) cambios.push('entradas: '+(oldItem.entradas||0)+'→'+newEnt);
+  if ((Number(oldItem.salidas)||0) !== newSal) cambios.push('salidas: '+(oldItem.salidas||0)+'→'+newSal);
+  if ((Number(oldItem.precio)||0) !== newPrecio) cambios.push('precio: '+(oldItem.precio||0)+'→'+newPrecio);
+  if ((oldItem.estatus||'') !== newEstatus) cambios.push('estatus: '+(oldItem.estatus||'')+'→'+newEstatus);
+
+  var nuevoHistorial = (oldItem.historial||[]).slice();
+  if (cambios.length) {
+    nuevoHistorial.push({
+      tipo: 'EDIT',
+      fecha: new Date().toISOString(),
+      qty: newStock,
+      loc: newUbic,
+      user: user ? user.name : 'Sistema',
+      ref: 'Edición: ' + cambios.join(', ')
+    });
+  }
+
+  items[idx] = Object.assign({}, oldItem, {
+    pn: newPN, desc: newDesc, familia: newFam,
+    inicial: newIni, entradas: newEnt, salidas: newSal,
+    actual: newStock, precio: newPrecio,
+    estatus: newEstatus, ubicacion: newUbic,
+    historial: nuevoHistorial
+  });
   saveLocal();
   if (db) {
     try {
@@ -645,14 +702,68 @@ async function saveEdit() {
       if (oldDocId !== newDocId) {
         await db.collection('planta4_inventario').doc(oldDocId).delete();
       }
-      await db.collection('planta4_inventario').doc(newDocId).set(items[idx], {merge:true});
-    } catch(e) { console.error('saveEdit Firestore:', e); }
+      // Quitar _docId antes de guardar (es campo interno)
+      var dataGuardar = Object.assign({}, items[idx]);
+      delete dataGuardar._docId;
+      await db.collection('planta4_inventario').doc(newDocId).set(dataGuardar, {merge:true});
+      items[idx]._docId = newDocId;
+    } catch(e) { console.error('saveEdit Firestore:', e); toast('Local OK. Firebase: '+e.message, 'warn'); }
   }
   closeEdit();
-  renderInv(); updateDash(); updatePNList();
-  toast('✅ Parte actualizada','ok');
+  renderInv(); updateDash(); if (typeof updatePNList==='function') updatePNList();
+  if (typeof renderHist==='function') renderHist();
+  toast('✅ Parte actualizada' + (cambios.length?' · '+cambios.length+' campo(s)':''), 'ok');
 }
 window.saveEdit = saveEdit;
+
+async function deleteFromEdit() {
+  const idx = window._editIdx;
+  if (idx === undefined || idx === null) return;
+  if (!user || user.role !== 'admin') { toast('Solo admin puede eliminar','err'); return; }
+  const it = items[idx];
+  var nombre = (it.pn||'') + ' · ' + (it.desc||'');
+  var actual = Number(it.actual)||0;
+  var msg = 'Eliminar definitivamente esta parte?\n\n' + nombre;
+  if (actual > 0) msg += '\n\n⚠️ ATENCIÓN: tiene stock actual de ' + actual.toLocaleString() + ' pzas.';
+  msg += '\n\nTambién se borrarán todos sus movimientos del historial.\n\nEsta acción NO se puede deshacer.';
+  if (!confirm(msg)) return;
+
+  try {
+    var docId = it._docId || getDocId(it.pn, it.desc);
+    // Borrar item
+    if (db) await db.collection('planta4_inventario').doc(docId).delete();
+    // Borrar movimientos asociados
+    var bm = 0;
+    if (db) {
+      var snap = await db.collection('planta4_movimientos').get();
+      for (var k = 0; k < snap.docs.length; k++) {
+        var d = snap.docs[k];
+        var r = d.data();
+        if ((r.pn||'').toUpperCase() === (it.pn||'').toUpperCase() &&
+            (r.desc||'').toUpperCase() === (it.desc||'').toUpperCase()) {
+          await d.ref.delete();
+          bm++;
+        }
+      }
+    }
+    // Borrar local
+    items.splice(idx, 1);
+    movs = movs.filter(function(m){
+      return !((m.pn||'').toUpperCase()===(it.pn||'').toUpperCase() &&
+               (m.desc||'').toUpperCase()===(it.desc||'').toUpperCase());
+    });
+    saveLocal();
+    closeEdit();
+    renderInv(); updateDash();
+    if (typeof renderHist === 'function') renderHist();
+    if (typeof renderLocMap === 'function') renderLocMap();
+    toast('🗑️ Eliminado · ' + bm + ' mov(s) borrados', 'ok');
+  } catch(e) {
+    console.error('deleteFromEdit:', e);
+    toast('Error: ' + e.message, 'err');
+  }
+}
+window.deleteFromEdit = deleteFromEdit;
 // ── FIREBASE ──
 function initFirebase() {
   try {
@@ -1620,7 +1731,7 @@ function xlsConfirmar(){
   }
 }
 </script>
-<div id="modalEdit" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:700;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)"><div style="background:var(--bg2);border-radius:18px 18px 0 0;padding:1.5rem 1.2rem;width:100%;max-width:500px;border-top:1px solid var(--border2)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem"><span style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700">Editar Parte</span><button onclick="closeEdit()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer">X</button></div><label class="fl">Part Number</label><input class="fi" id="editPN" type="text" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase;font-family:monospace"><label class="fl">Descripcion</label><input class="fi" id="editDesc" type="text" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase"><label class="fl">Familia</label><select class="fi" id="editFam"><option value="GH68">GH68</option><option value="GH69">GH69</option><option value="GH90">GH90</option><option value="Otro">Otro</option></select><div style="display:flex;gap:8px;margin-top:.5rem"><button onclick="closeEdit()" style="flex:1;padding:12px;background:var(--bg3);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-size:13px;cursor:pointer">Cancelar</button><button onclick="saveEdit()" style="flex:1;padding:12px;background:var(--accent2);border:none;border-radius:9px;color:#fff;font-size:13px;font-weight:600;cursor:pointer">Guardar</button></div></div></div>
+<div id="modalEdit" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:700;align-items:center;justify-content:center;backdrop-filter:blur(4px);padding:1rem;overflow-y:auto"><div style="background:var(--bg2);border-radius:14px;padding:1.4rem 1.2rem;width:100%;max-width:540px;border:1px solid var(--border2);max-height:92vh;overflow-y:auto"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem"><span style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700">Editar Parte</span><button onclick="closeEdit()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer">X</button></div><div style="font-size:11px;font-weight:600;color:#4DA6FF;letter-spacing:.8px;margin-bottom:6px">📋 CATÁLOGO</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px"><div><label class="fl" style="margin-bottom:2px">Part Number</label><input class="fi" id="editPN" type="text" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase;font-family:monospace;margin:0"></div><div><label class="fl" style="margin-bottom:2px">Familia</label><select class="fi" id="editFam" style="margin:0"><option value="GH68">GH68</option><option value="GH69">GH69</option><option value="GH90">GH90</option><option value="Otro">Otro</option></select></div></div><div style="margin-bottom:14px"><label class="fl" style="margin-bottom:2px">Descripción</label><input class="fi" id="editDesc" type="text" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase;margin:0"></div><div style="font-size:11px;font-weight:600;color:#00e676;letter-spacing:.8px;margin-bottom:6px">📦 INVENTARIO</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px"><div><label class="fl" style="margin-bottom:2px">Inv. inicial</label><input class="fi" id="editInicial" type="number" oninput="_editRecalcStock()" style="font-family:monospace;margin:0"></div><div><label class="fl" style="margin-bottom:2px">Entradas</label><input class="fi" id="editEntradas" type="number" oninput="_editRecalcStock()" style="font-family:monospace;color:#00e676;margin:0"></div><div><label class="fl" style="margin-bottom:2px">Salidas</label><input class="fi" id="editSalidas" type="number" oninput="_editRecalcStock()" style="font-family:monospace;color:#ff6b6b;margin:0"></div></div><div style="background:rgba(77,166,255,.08);border:1px solid rgba(77,166,255,.3);border-radius:7px;padding:7px 10px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;color:var(--text2)">Stock actual (calculado)</span><span id="editStockCalc" style="font-family:monospace;font-size:15px;font-weight:700;color:#4DA6FF">0 pzas</span></div><div style="font-size:11px;font-weight:600;color:#FFBA00;letter-spacing:.8px;margin-bottom:6px">💲 PRECIO Y ESTATUS</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px"><div><label class="fl" style="margin-bottom:2px">Precio USD</label><input class="fi" id="editPrecio" type="number" step="0.0001" style="font-family:monospace;margin:0"></div><div><label class="fl" style="margin-bottom:2px">Estatus</label><select class="fi" id="editEstatus" style="margin:0"><option value="DONE">DONE</option><option value="Pendiente">Pendiente</option><option value="Archivado">Archivado</option></select></div><div><label class="fl" style="margin-bottom:2px">Ubicación</label><input class="fi" id="editUbic" type="text" style="margin:0"></div></div><div style="padding-top:12px;border-top:1px solid var(--border2);display:flex;gap:8px;align-items:center"><button onclick="deleteFromEdit()" style="padding:10px 12px;background:rgba(255,68,68,.12);border:1px solid rgba(255,68,68,.4);border-radius:8px;color:#ff6b6b;font-size:12px;font-weight:600;cursor:pointer">🗑️ Eliminar</button><div style="flex:1"></div><button onclick="closeEdit()" style="padding:10px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;cursor:pointer">Cancelar</button><button onclick="saveEdit()" style="padding:10px 18px;background:var(--accent2);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer">💾 Guardar</button></div></div></div>
 
 </body>
 </html>
