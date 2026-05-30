@@ -386,6 +386,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div class="ac" onclick="cleanDuplicates()" style="border-color:#e74c3c"><div class="ac-i">🧹</div><div class="ac-l">Limpiar duplicados</div><div class="ac-s">Eliminar IDs viejos</div></div>
       <div class="ac" onclick="resetStock()"><div class="ac-i">🔄</div><div class="ac-l">Reset stock</div><div class="ac-s">Volver a inicial</div></div>
       <div class="ac" onclick="abrirCargaExcel()" style="border-color:rgba(0,230,118,.3)"><div class="ac-i">📥</div><div class="ac-l">Cargar Excel</div><div class="ac-s">Reemplazar inventario</div></div>
+      <div class="ac" onclick="abrirImportPrecios()" style="border-color:rgba(255,179,0,.4)"><div class="ac-i">💲</div><div class="ac-l">Importar Precios</div><div class="ac-s">Desde Excel PN+Price</div></div>
     </div>
     <div class="sh">Usuarios IMS</div>
     <div class="card" style="padding:.9rem">
@@ -1732,6 +1733,222 @@ function xlsConfirmar(){
 }
 </script>
 <div id="modalEdit" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:700;align-items:center;justify-content:center;backdrop-filter:blur(4px);padding:1rem;overflow-y:auto"><div style="background:var(--bg2);border-radius:14px;padding:1.4rem 1.2rem;width:100%;max-width:540px;border:1px solid var(--border2);max-height:92vh;overflow-y:auto"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem"><span style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700">Editar Parte</span><button onclick="closeEdit()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer">X</button></div><div style="font-size:11px;font-weight:600;color:#4DA6FF;letter-spacing:.8px;margin-bottom:6px">📋 CATÁLOGO</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px"><div><label class="fl" style="margin-bottom:2px">Part Number</label><input class="fi" id="editPN" type="text" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase;font-family:monospace;margin:0"></div><div><label class="fl" style="margin-bottom:2px">Familia</label><select class="fi" id="editFam" style="margin:0"><option value="GH68">GH68</option><option value="GH69">GH69</option><option value="GH90">GH90</option><option value="Otro">Otro</option></select></div></div><div style="margin-bottom:14px"><label class="fl" style="margin-bottom:2px">Descripción</label><input class="fi" id="editDesc" type="text" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase;margin:0"></div><div style="font-size:11px;font-weight:600;color:#00e676;letter-spacing:.8px;margin-bottom:6px">📦 INVENTARIO</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px"><div><label class="fl" style="margin-bottom:2px">Inv. inicial</label><input class="fi" id="editInicial" type="number" oninput="_editRecalcStock()" style="font-family:monospace;margin:0"></div><div><label class="fl" style="margin-bottom:2px">Entradas</label><input class="fi" id="editEntradas" type="number" oninput="_editRecalcStock()" style="font-family:monospace;color:#00e676;margin:0"></div><div><label class="fl" style="margin-bottom:2px">Salidas</label><input class="fi" id="editSalidas" type="number" oninput="_editRecalcStock()" style="font-family:monospace;color:#ff6b6b;margin:0"></div></div><div style="background:rgba(77,166,255,.08);border:1px solid rgba(77,166,255,.3);border-radius:7px;padding:7px 10px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;color:var(--text2)">Stock actual (calculado)</span><span id="editStockCalc" style="font-family:monospace;font-size:15px;font-weight:700;color:#4DA6FF">0 pzas</span></div><div style="font-size:11px;font-weight:600;color:#FFBA00;letter-spacing:.8px;margin-bottom:6px">💲 PRECIO Y ESTATUS</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px"><div><label class="fl" style="margin-bottom:2px">Precio USD</label><input class="fi" id="editPrecio" type="number" step="0.0001" style="font-family:monospace;margin:0"></div><div><label class="fl" style="margin-bottom:2px">Estatus</label><select class="fi" id="editEstatus" style="margin:0"><option value="DONE">DONE</option><option value="Pendiente">Pendiente</option><option value="Archivado">Archivado</option></select></div><div><label class="fl" style="margin-bottom:2px">Ubicación</label><input class="fi" id="editUbic" type="text" style="margin:0"></div></div><div style="padding-top:12px;border-top:1px solid var(--border2);display:flex;gap:8px;align-items:center"><button onclick="deleteFromEdit()" style="padding:10px 12px;background:rgba(255,68,68,.12);border:1px solid rgba(255,68,68,.4);border-radius:8px;color:#ff6b6b;font-size:12px;font-weight:600;cursor:pointer">🗑️ Eliminar</button><div style="flex:1"></div><button onclick="closeEdit()" style="padding:10px 14px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;cursor:pointer">Cancelar</button><button onclick="saveEdit()" style="padding:10px 18px;background:var(--accent2);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:600;cursor:pointer">💾 Guardar</button></div></div></div>
+
+
+<!-- ===== MODAL: IMPORTAR PRECIOS ===== -->
+<div id="modalImportPrecios" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:700;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px);padding:0">
+  <div style="background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:1.5rem 1.2rem 2.5rem;border-top:1px solid var(--border2);max-height:88vh;overflow-y:auto;position:relative">
+    <div style="width:36px;height:3px;border-radius:2px;background:var(--border2);margin:0 auto 1.2rem"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
+      <div style="font-family:'Rajdhani',sans-serif;font-size:17px;font-weight:700">💲 Importar Precios</div>
+      <button onclick="cerrarImportPrecios()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:1rem">Carga tu Excel con columnas <b style="color:var(--accent)">PN</b> y <b style="color:var(--accent)">Price</b> — actualiza todos los precios de un clic</div>
+
+    <div id="ipStep1">
+      <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:.85rem;margin-bottom:.8rem">
+        <div style="font-size:10px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem">Formato requerido</div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:5px 8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border)">PN</th>
+              <th style="text-align:left;padding:5px 8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border)">Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding:5px 8px;border:1px solid var(--border);color:var(--text);font-family:monospace">GH68-52797P</td>
+              <td style="padding:5px 8px;border:1px solid var(--border);color:var(--green)">$ 0.0501</td>
+            </tr>
+            <tr>
+              <td style="padding:5px 8px;border:1px solid var(--border);color:var(--text);font-family:monospace">GH69-30001A</td>
+              <td style="padding:5px 8px;border:1px solid var(--border);color:var(--green)">$ 1.2500</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="font-size:10px;color:var(--text2);margin-top:.5rem">También acepta: <code>Part Number</code> / <code>Precio Unit ($)</code></div>
+      </div>
+
+      <div style="background:var(--bg3);border:1px dashed rgba(255,179,0,.4);border-radius:10px;padding:1.2rem;text-align:center;cursor:pointer;margin-bottom:.8rem" onclick="document.getElementById('ipFileInput').click()">
+        <div style="font-size:28px;margin-bottom:.4rem">📂</div>
+        <div style="font-size:13px;font-weight:600;color:var(--amber)" id="ipFileName">Seleccionar archivo Excel</div>
+        <div style="font-size:10px;color:var(--text2);margin-top:3px">.xlsx o .xls</div>
+      </div>
+      <input type="file" id="ipFileInput" accept=".xlsx,.xls" style="display:none" onchange="ipLeerArchivo(this)">
+
+      <div id="ipError" style="display:none;background:rgba(255,68,68,.1);border:1px solid rgba(255,68,68,.3);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--red);margin-bottom:.8rem"></div>
+
+      <button id="ipBtnConf" onclick="ipAplicar()" style="display:none;width:100%;padding:13px;background:var(--amber);color:#000;border:none;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;font-family:'Rajdhani',sans-serif;letter-spacing:.5px"></button>
+    </div>
+
+    <div id="ipStep2" style="display:none;text-align:center;padding:1.5rem 0">
+      <div style="font-size:36px;margin-bottom:.8rem" id="ipDoneIcon">⏳</div>
+      <div style="font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;color:var(--text)" id="ipDoneMsg">Aplicando precios...</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:.4rem" id="ipDoneSub"></div>
+    </div>
+
+    <div id="ipPreview" style="display:none;margin-top:.8rem">
+      <div style="font-size:10px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem" id="ipPreviewTitle"></div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:11px" id="ipPreviewTable"></table>
+      </div>
+      <div id="ipNoMatch" style="display:none;font-size:11px;color:var(--amber);margin-top:.6rem"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+var _ipDatos={};
+
+function abrirImportPrecios(){
+  _ipDatos={};
+  document.getElementById('ipFileName').textContent='Seleccionar archivo Excel';
+  document.getElementById('ipFileInput').value='';
+  document.getElementById('ipError').style.display='none';
+  document.getElementById('ipBtnConf').style.display='none';
+  document.getElementById('ipStep1').style.display='block';
+  document.getElementById('ipStep2').style.display='none';
+  document.getElementById('ipPreview').style.display='none';
+  document.getElementById('ipNoMatch').style.display='none';
+  var m=document.getElementById('modalImportPrecios');
+  m.style.display='flex';
+}
+
+function cerrarImportPrecios(){
+  document.getElementById('modalImportPrecios').style.display='none';
+}
+
+function ipError(msg){
+  var el=document.getElementById('ipError');
+  el.style.display='block';
+  el.textContent='⚠️ '+msg;
+  document.getElementById('ipBtnConf').style.display='none';
+}
+
+function ipFindCol(row,candidates){
+  for(var j=0;j<row.length;j++){
+    var v=String(row[j]||'').trim().toLowerCase();
+    if(candidates.some(function(c){return v===c.toLowerCase();}))return j;
+  }
+  return -1;
+}
+
+function ipParsePrice(val){
+  if(val===null||val===undefined||val==='')return null;
+  if(typeof val==='number')return val;
+  var n=parseFloat(String(val).replace(/[$\s,]/g,''));
+  return isNaN(n)?null:n;
+}
+
+function ipLeerArchivo(input){
+  var file=input.files[0];
+  if(!file)return;
+  document.getElementById('ipFileName').textContent=file.name;
+  document.getElementById('ipError').style.display='none';
+  document.getElementById('ipPreview').style.display='none';
+  document.getElementById('ipBtnConf').style.display='none';
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      var pnCands=['PN','Part Number','part number','PART NUMBER','PartNumber'];
+      var prCands=['Price','price','Precio','Precio Unit ($)','Precio Unit','Precio USD','precio usd','PRICE','Costo'];
+      var hRow=-1,pnC=-1,prC=-1,raw=null;
+      for(var si=0;si<wb.SheetNames.length;si++){
+        var ws=wb.Sheets[wb.SheetNames[si]];
+        var r=XLSX.utils.sheet_to_json(ws,{header:1});
+        for(var i=0;i<Math.min(r.length,5);i++){
+          var pc=ipFindCol(r[i],pnCands);
+          var rc=ipFindCol(r[i],prCands);
+          if(pc>=0&&rc>=0){hRow=i;pnC=pc;prC=rc;raw=r;break;}
+        }
+        if(raw)break;
+      }
+      if(!raw||hRow<0){return ipError('No se reconocen las columnas. Acepta: PN/Part Number + Price/Precio USD');}
+      var map={},count=0;
+      for(var i=hRow+1;i<raw.length;i++){
+        var row=raw[i];
+        var pn=row[pnC]?String(row[pnC]).trim():null;
+        var pr=ipParsePrice(row[prC]);
+        if(pn&&pr!==null){map[pn]=pr;count++;}
+      }
+      if(!count){return ipError('No se encontraron precios válidos en el archivo.');}
+      _ipDatos=map;
+      document.getElementById('ipBtnConf').style.display='block';
+      document.getElementById('ipBtnConf').textContent='✓ Aplicar '+count+' precios al inventario';
+      var matched=0;
+      if(typeof items!=='undefined'){
+        items.forEach(function(it){if(map[it.pn]!==undefined)matched++;});
+      }
+      var prev=document.getElementById('ipPreview');
+      var prevTitle=document.getElementById('ipPreviewTitle');
+      var prevTable=document.getElementById('ipPreviewTable');
+      prevTitle.textContent='Vista previa (primeros 6 de '+count+' — '+matched+' coinciden con el inventario)';
+      var shown=Object.keys(map).slice(0,6);
+      prevTable.innerHTML='<thead><tr><th style="text-align:left;padding:5px 8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border)">Part Number</th><th style="text-align:right;padding:5px 8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border)">Precio ($)</th></tr></thead><tbody>'+
+        shown.map(function(pn){return '<tr><td style="padding:5px 8px;border:1px solid var(--border);font-family:monospace;font-size:10px;color:var(--text)">'+pn+'</td><td style="padding:5px 8px;border:1px solid var(--border);text-align:right;color:var(--green)">$'+map[pn].toFixed(4)+'</td></tr>';}).join('')+
+      '</tbody>';
+      prev.style.display='block';
+    }catch(err){ipError('Error leyendo el archivo: '+err.message);}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function ipAplicar(){
+  if(!Object.keys(_ipDatos).length)return;
+  document.getElementById('ipStep1').style.display='none';
+  document.getElementById('ipPreview').style.display='none';
+  document.getElementById('ipStep2').style.display='block';
+  document.getElementById('ipDoneIcon').textContent='⏳';
+  document.getElementById('ipDoneMsg').textContent='Aplicando precios...';
+  document.getElementById('ipDoneSub').textContent='';
+
+  var updated=0,notFound=[];
+  if(typeof items!=='undefined'){
+    items.forEach(function(it){
+      if(_ipDatos[it.pn]!==undefined){
+        it.precio=_ipDatos[it.pn];
+        updated++;
+      } else {
+        notFound.push(it.pn);
+      }
+    });
+    if(typeof saveLocal==='function')saveLocal();
+    if(typeof updateDash==='function')updateDash();
+  }
+
+  if(typeof db!=='undefined'&&db&&updated>0){
+    var batch=db.batch();
+    var count=0;
+    items.forEach(function(it){
+      if(_ipDatos[it.pn]!==undefined){
+        batch.update(db.collection('planta4_inventario').doc(typeof getDocId==='function'?getDocId(it.pn,it.desc):it.pn),{precio:it.precio});
+        count++;
+        if(count%400===0){batch.commit();batch=db.batch();}
+      }
+    });
+    batch.commit().then(function(){
+      document.getElementById('ipDoneIcon').textContent='✅';
+      document.getElementById('ipDoneMsg').textContent=updated+' precios actualizados';
+      document.getElementById('ipDoneSub').textContent='Guardado en Firebase correctamente';
+      if(typeof toast==='function')toast('Precios importados: '+updated+' PN','ok');
+      setTimeout(cerrarImportPrecios,2200);
+    }).catch(function(err){
+      document.getElementById('ipDoneIcon').textContent='⚠️';
+      document.getElementById('ipDoneMsg').textContent=updated+' precios actualizados (local)';
+      document.getElementById('ipDoneSub').textContent='Firebase: '+err.message;
+      setTimeout(cerrarImportPrecios,3000);
+    });
+  } else {
+    document.getElementById('ipDoneIcon').textContent='✅';
+    document.getElementById('ipDoneMsg').textContent=updated+' precios actualizados';
+    document.getElementById('ipDoneSub').textContent=notFound.length>0?'Sin match: '+notFound.slice(0,4).join(', ')+(notFound.length>4?' y '+(notFound.length-4)+' más':''):'Todos los PN encontrados en el inventario';
+    if(typeof toast==='function')toast('Precios importados: '+updated+' PN','ok');
+    setTimeout(cerrarImportPrecios,2200);
+  }
+}
+</script>
 
 </body>
 </html>
