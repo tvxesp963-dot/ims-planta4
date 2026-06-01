@@ -432,9 +432,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     </div>
     <div class="sh">Agregar Part Number</div>
     <div class="card" style="padding:.9rem">
+      <div style="padding:8px 10px;background:rgba(77,166,255,.07);border-radius:8px;border-left:3px solid var(--accent);font-size:10px;color:var(--text2);margin-bottom:.8rem;line-height:1.5">
+        💡 <b style="color:var(--text)">Un PN puede tener varias descripciones.</b><br>
+        La llave única es <b style="color:var(--accent)">PN + Descripción</b> juntos.<br>
+        Ej: GH69-44806A puede ser <i>BUNDLE</i>, <i>PULP TRAY</i>, etc. — cada una es una línea distinta.
+      </div>
       <div style="margin-bottom:.6rem">
         <div style="font-size:10px;color:var(--text2);margin-bottom:3px">PN * 11 chars</div>
-        <input id="npPN" class="ref-in" maxlength="11" placeholder="GH69-XXXXX" oninput="this.value=this.value.toUpperCase()" style="margin:0;font-family:monospace">
+        <input id="npPN" class="ref-in" maxlength="11" placeholder="GH69-XXXXX" oninput="this.value=this.value.toUpperCase();npCheckVariantes()" style="margin:0;font-family:monospace">
+        <div id="npVariantesHint" style="font-size:9px;color:var(--accent);margin-top:3px;min-height:12px"></div>
       </div>
       <div style="margin-bottom:.6rem">
         <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Familia</div>
@@ -443,7 +449,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         </select>
       </div>
       <div style="margin-bottom:.6rem">
-        <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Descripción</div>
+        <div style="font-size:10px;color:var(--text2);margin-bottom:3px">Descripción <span style="color:var(--accent)">(nueva variante)</span></div>
         <input id="npD" class="ref-in" placeholder="DESCRIPCION" style="margin:0" oninput="this.value=this.value.toUpperCase()">
       </div>
       <div style="margin-bottom:.6rem">
@@ -1595,6 +1601,24 @@ function resetStock() { if(user.role!=='admin'){toast('Solo admins','err');retur
 // ── TOAST ──
 
 // ── AGREGAR PN ──
+// Muestra cuántas variantes existen para el PN mientras el usuario escribe
+function npCheckVariantes() {
+  var pn = (document.getElementById('npPN').value||'').trim().toUpperCase();
+  var hint = document.getElementById('npVariantesHint');
+  if (!hint) return;
+  if (pn.length < 11) { hint.textContent = ''; return; }
+  var variantes = items.filter(function(i) { return i.pn === pn; });
+  if (variantes.length === 0) {
+    hint.style.color = 'var(--green)';
+    hint.textContent = '✓ PN nuevo — se creará la primera línea';
+  } else {
+    hint.style.color = 'var(--accent)';
+    var descs = variantes.map(function(i){ return i.desc; }).join(', ');
+    hint.textContent = '↳ ' + variantes.length + ' variante(s) existente(s): ' + descs;
+  }
+}
+window.npCheckVariantes = npCheckVariantes;
+
 function doAddPN() {
   if (!user || user.role !== 'admin') { toast('Solo admins', 'err'); return; }
   var pn = document.getElementById('npPN').value.trim().toUpperCase();
@@ -1605,8 +1629,15 @@ function doAddPN() {
   var prc = parseFloat(document.getElementById('npP').value) || 0;
   if (pn.length !== 11) { toast('PN debe tener 11 caracteres', 'err'); return; }
   if (!pn.includes('-')) { toast('PN debe incluir guion', 'err'); return; }
-  if (items.find(function(i) { return i.pn === pn; })) { toast('PN ya existe', 'err'); return; }
   if (!desc) { toast('Descripción obligatoria', 'err'); return; }
+  // ✅ La llave única es PN + Descripción juntos
+  // El mismo PN puede tener varias descripciones (ej: GH69-44806A con 4 variantes)
+  if (items.find(function(i) { return i.pn === pn && i.desc === desc; })) {
+    // Mostrar cuántas variantes ya existen para ese PN
+    var variantes = items.filter(function(i) { return i.pn === pn; });
+    toast('Ya existe ' + pn + ' con esa descripción. Variantes actuales: ' + variantes.length, 'err');
+    return;
+  }
   var ni = {
     pn: pn, desc: desc, familia: fam, inicial: stk, precio: prc,
     estatus: 'DONE', ubicacion: ub, entradas: 0, salidas: 0, actual: stk,
@@ -1621,18 +1652,32 @@ function doAddPN() {
   document.getElementById('npP').value = '';
   if (document.getElementById('npUb')) document.getElementById('npUb').value = 'Almacén';
   updateDash(); renderInv(); buildAdmin();
-  toast('PN ' + pn + ' agregado', 'ok');
+  // Aviso si el PN ya tenía otras variantes
+  var totalVariantes = items.filter(function(i) { return i.pn === pn; }).length;
+  if (totalVariantes > 1) {
+    toast('✅ ' + pn + ' agregado — variante ' + totalVariantes + ' de ' + totalVariantes, 'ok');
+  } else {
+    toast('✅ PN ' + pn + ' agregado', 'ok');
+  }
 }
 
-function doDeletePN(pn) {
+function doDeletePN(pn, desc) {
   if (!user || user.role !== 'admin') { toast('Solo admins', 'err'); return; }
-  if (!confirm('¿Eliminar ' + pn + '? Esta acción no se puede deshacer.')) return;
-  items = items.filter(function(i) { return i.pn !== pn; });
+  // Si se pasa descripción, eliminar solo esa variante; si no, eliminar todas las del PN
+  var label = desc ? (pn + ' · ' + desc) : pn;
+  if (!confirm('¿Eliminar ' + label + '? Esta acción no se puede deshacer.')) return;
+  if (desc) {
+    var toDelete = items.find(function(i) { return i.pn === pn && i.desc === desc; });
+    items = items.filter(function(i) { return !(i.pn === pn && i.desc === desc); });
+    if (db && toDelete) db.collection('planta4_inventario').doc(getDocId(pn, desc)).delete().catch(function(){});
+  } else {
+    var toDeleteAll = items.filter(function(i) { return i.pn === pn; });
+    items = items.filter(function(i) { return i.pn !== pn; });
+    if (db) toDeleteAll.forEach(function(it){ db.collection('planta4_inventario').doc(getDocId(pn, it.desc)).delete().catch(function(){}); });
+  }
   saveLocal();
-  const delItem = items.find(i=>i.pn===pn);
-  if (db) db.collection('planta4_inventario').doc(getDocId(pn, delItem?delItem.desc:'')).delete().catch(function(){});
   updateDash(); renderInv(); buildAdmin();
-  toast('PN ' + pn + ' eliminado', 'ok');
+  toast('✅ ' + label + ' eliminado', 'ok');
 }
 
 function toast(msg,type) { const t=document.getElementById('toastEl'); t.textContent=msg; t.className='toast show '+(type||''); clearTimeout(t._t); t._t=setTimeout(()=>t.className='toast',3000); }
