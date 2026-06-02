@@ -1265,19 +1265,26 @@ function stopScanManual(){
 function processQRScan(text){
   const parts=text.split('|');
   const pn=(parts[0]||text).trim();
-  const idx=items.findIndex(i=>i.pn===pn);
+  const desc=(parts[1]||'').trim();
+  // Si el QR tiene descripción, buscar por PN + descripción exacta primero
+  let idx=-1;
+  if(desc){
+    idx=items.findIndex(i=>i.pn===pn && i.desc.toUpperCase()===desc.toUpperCase());
+  }
+  // Si no encontró con desc, buscar solo por PN (QR viejo sin desc)
+  if(idx<0){
+    idx=items.findIndex(i=>i.pn===pn);
+  }
   if(idx>=0){
-    // Si no hay tipo de movimiento activo, iniciar ENTRADA por defecto
     if(!movTipo) initMov('E');
     selForMov(idx);
-    toast('✅ '+pn+' encontrado','ok');
+    toast('✅ '+items[idx].pn+' · '+items[idx].desc+' encontrado','ok');
   } else {
-    // Buscar parcialmente
     const idx2=items.findIndex(i=>i.pn.includes(pn)||pn.includes(i.pn));
     if(idx2>=0){
       if(!movTipo) initMov('E');
       selForMov(idx2);
-      toast('✅ '+items[idx2].pn+' encontrado','ok');
+      toast('✅ '+items[idx2].pn+' · '+items[idx2].desc+' encontrado','ok');
     } else {
       document.getElementById('movS').value=pn;
       renderMovList();
