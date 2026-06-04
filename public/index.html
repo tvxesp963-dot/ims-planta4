@@ -283,10 +283,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   <div id="pgMov" class="page">
     <div class="sh">Tipo de movimiento</div>
     <div class="ba-row">
-      <button class="ba ba-E" onclick="initMov('E')"><div class="ba-i">⬇️</div>ENTRADA</button>
-      <button class="ba ba-S" onclick="initMov('S')"><div class="ba-i">⬆️</div>SALIDA</button>
-      <button class="ba ba-T" onclick="initMov('T')"><div class="ba-i">🔀</div>TRASLADO</button>
+      <button class="ba ba-E" onclick="initMov('E');showMovGuide('E')"><div class="ba-i">⬇️</div>ENTRADA</button>
+      <button class="ba ba-S" onclick="initMov('S');showMovGuide('S')"><div class="ba-i">⬆️</div>SALIDA</button>
+      <button class="ba ba-T" onclick="initMov('T');showMovGuide('T')"><div class="ba-i">🔀</div>TRASLADO</button>
     </div>
+    <!-- Guía visual de movimiento -->
+    <div id="movGuide" style="display:none;margin:.4rem 0 .6rem 0;padding:9px 12px;border-radius:10px;font-size:10px;line-height:1.6;border-left:3px solid var(--accent);background:rgba(77,166,255,.06)"></div>
     <div id="scanBox" style="margin-bottom:.7rem">
       <div id="scanPreview" style="display:none;position:relative;border-radius:12px;overflow:hidden;background:#000;">
         <video id="scanVideo" style="width:100%;border-radius:12px;display:block" playsinline autoplay muted></video>
@@ -1067,6 +1069,19 @@ function fmtDate(d) { try{const dt=new Date(d);return dt.toLocaleDateString('es-
 function closeModal() { document.getElementById('modal').classList.remove('show'); }
 
 // ── MOVIMIENTO ──
+function showMovGuide(t) {
+  const guide = document.getElementById('movGuide');
+  if (!guide) return;
+  const info = {
+    'E': '⬇️ <b>ENTRADA</b> — Material que llega al almacén.<br>✅ Aumenta el stock.<br>📍 Ej: Recibo de proveedor o devolución de línea sin usar.',
+    'S': '⬆️ <b>SALIDA</b> — Material consumido en producción.<br>❗ Disminuye el stock.<br>📍 Ej: Piezas usadas en S1, S2, etc. No se recuperan.',
+    'T': '🔀 <b>TRASLADO</b> — Material que cambia de ubicación.<br>⚖️ El stock NO cambia, solo la ubicación.<br>📍 Ej: Almacén → S1 (envío) o S1 → Almacén (regreso sin usar).'
+  };
+  guide.innerHTML = info[t] || '';
+  guide.style.display = 'block';
+}
+window.showMovGuide = showMovGuide;
+
 function initMov(t) {
   movTipo = t;
   const labels = {E:'⬇️ ENTRADA',S:'⬆️ SALIDA',T:'🔀 TRASLADO'};
