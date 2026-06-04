@@ -898,6 +898,7 @@ function checkViewerPass() {
     document.getElementById('viewerScreen').style.display = 'none';
     user = {email:'viewer@ims', name:'Viewer', role:'viewer'};
     localStorage.setItem('ims4_user', JSON.stringify(user));
+    initFirebase();
     launch();
   } else {
     err.style.display = 'block';
