@@ -899,7 +899,7 @@ function checkViewerPass() {
     user = {email:'viewer@ims', name:'Viewer', role:'viewer'};
     localStorage.setItem('ims4_user', JSON.stringify(user));
     initFirebase();
-    launch();
+    setTimeout(launch, 300);
   } else {
     err.style.display = 'block';
     document.getElementById('viewerPass').value = '';
@@ -971,18 +971,17 @@ function launch() {
   if(user.role==='admin') setTimeout(loadImsUsers, 500);
   // VIEWER: ocultar todo excepto Inventario
   const isViewer = (user.role==='viewer');
-  ['pgDash','pgMov','pgTraz','pgQR','pgHist','pgPlan'].forEach(id=>{
+  ['pgMov','pgTraz','pgQR','pgHist','pgPlan'].forEach(id=>{
     const btn = document.querySelector(`.bni[onclick*="${id}"]`);
     if(btn) btn.style.display = isViewer ? 'none' : '';
   });
-  if(isViewer) goPage('pgInv', document.querySelector('.bni[onclick*="pgInv"]'));
   // Ocultar módulo de movimientos para viewers
   const navMov = document.getElementById('navMov');
-  if(navMov) navMov.style.display = user.role==='viewer'?'none':'flex';
+  if(navMov) navMov.style.display = isViewer?'none':'flex';
   document.getElementById('tbDate').textContent = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'});
   startSync();
   loadFromFirestore();
-  updateDash(); renderInv(); renderHist(); renderLocMap(); buildAdmin();
+  if(!isViewer){ updateDash(); renderInv(); renderHist(); renderLocMap(); buildAdmin(); }
 }
 
 // init on load
