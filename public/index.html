@@ -968,6 +968,13 @@ function launch() {
   rb.className = 'ur '+(user.role==='admin'?'ra':user.role==='operador'?'ro':'rv');
   document.getElementById('navAdmin').style.display = user.role==='admin'?'flex':'none';
   if(user.role==='admin') setTimeout(loadImsUsers, 500);
+  // VIEWER: ocultar todo excepto Inventario
+  const isViewer = (user.role==='viewer');
+  ['pgDash','pgMov','pgTraz','pgQR','pgHist','pgPlan'].forEach(id=>{
+    const btn = document.querySelector(`.bni[onclick*="${id}"]`);
+    if(btn) btn.style.display = isViewer ? 'none' : '';
+  });
+  if(isViewer) goPage('pgInv', document.querySelector('.bni[onclick*="pgInv"]'));
   // Ocultar módulo de movimientos para viewers
   const navMov = document.getElementById('navMov');
   if(navMov) navMov.style.display = user.role==='viewer'?'none':'flex';
