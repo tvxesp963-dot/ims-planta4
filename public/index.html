@@ -1029,10 +1029,10 @@ window.goBack = goBack;
 
 // ── DASHBOARD ──
 function updateDash() {
-  const tot = items.reduce((s,i)=>s+i.actual,0);
-  const val = items.reduce((s,i)=>s+(i.actual*i.precio),0);
+  const tot = items.reduce((s,i)=>s+(parseFloat(i.actual)||0),0);
+  const val = items.reduce((s,i)=>s+((parseFloat(i.actual)||0)*(parseFloat(i.precio)||0)),0);
   const fams = {GH68:{p:0,v:0},GH69:{p:0,v:0},GH90:{p:0,v:0}};
-  items.forEach(i=>{ if(fams[i.familia]) { fams[i.familia].p+=i.actual; fams[i.familia].v+=i.actual*i.precio; } });
+  items.forEach(i=>{ if(fams[i.familia]) { const a=parseFloat(i.actual)||0, p=parseFloat(i.precio)||0; fams[i.familia].p+=a; fams[i.familia].v+=a*p; } });
   document.getElementById('dL').textContent = items.length;
   document.getElementById('dP').textContent = fmt(tot);
   document.getElementById('dV').textContent = '$'+Math.round(val).toLocaleString();
