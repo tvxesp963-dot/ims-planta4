@@ -483,6 +483,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <div class="table-w"><table class="dt"><thead><tr><th>Part Number</th><th>Fam.</th><th>Stock</th></tr></thead><tbody id="pendBody"></tbody></table></div>
   </div>
 
+  <!-- Botón regreso -->
+  <div id="backBtn" style="display:none;position:fixed;top:12px;left:12px;z-index:999">
+    <button onclick="goBack()" style="background:rgba(30,35,50,.92);border:1px solid var(--border);color:var(--text);border-radius:20px;padding:6px 14px;font-size:12px;cursor:pointer;backdrop-filter:blur(8px)">← Regresar</button>
+  </div>
   <div class="bnav">
     <button class="bni on" onclick="goPage('pgDash',this)"><span class="bni-i">📊</span>Dash</button>
     <button class="bni" onclick="goPage('pgInv',this)"><span class="bni-i">📦</span>Inv.</button>
@@ -986,14 +990,37 @@ if (user) {
 }
 
 // ── NAVIGATION ──
+let pageHistory = ['pgDash'];
 function goPage(id, btn) {
+  const current = document.querySelector('.page.active');
+  if (current && current.id !== id) pageHistory.push(current.id);
+  if (pageHistory.length > 10) pageHistory.shift();
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.bni').forEach(b=>b.classList.remove('on'));
   document.getElementById(id).classList.add('active');
-  btn.classList.add('on');
+  if (btn) btn.classList.add('on');
   if (id==='pgAdmin') { buildAdmin(); if(user&&user.role==='admin') loadImsUsers(); }
   if (id==='pgPlan') { loadPlan(); }
+  // Mostrar botón regreso si no estamos en Dash
+  const backBtn = document.getElementById('backBtn');
+  if (backBtn) backBtn.style.display = (id === 'pgDash') ? 'none' : 'block';
 }
+function goBack() {
+  if (pageHistory.length <= 1) { 
+    const dashBtn = document.querySelector('.bni');
+    goPage('pgDash', dashBtn);
+    return;
+  }
+  pageHistory.pop(); // quitar actual
+  const prev = pageHistory[pageHistory.length-1] || 'pgDash';
+  const navMap = {
+    pgDash:0, pgInv:1, pgMov:2, pgTraz:3, pgQR:4, pgHist:5, pgPlan:6, pgAdmin:7
+  };
+  const bniBtns = document.querySelectorAll('.bni');
+  const btn = bniBtns[navMap[prev]] || bniBtns[0];
+  goPage(prev, btn);
+}
+window.goBack = goBack;
 
 // ── DASHBOARD ──
 function updateDash() {
