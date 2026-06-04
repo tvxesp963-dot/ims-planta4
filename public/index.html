@@ -484,10 +484,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   </div>
 
   <!-- Botón regreso -->
-  <div id="backBtn" style="display:none;position:fixed;top:12px;left:12px;z-index:999">
-    <button onclick="goBack()" style="background:rgba(30,35,50,.92);border:1px solid var(--border);color:var(--text);border-radius:20px;padding:6px 14px;font-size:12px;cursor:pointer;backdrop-filter:blur(8px)">← Regresar</button>
-  </div>
   <div class="bnav">
+    <button id="backBtn" onclick="goBack()" style="display:none;background:transparent;border:none;color:var(--accent);font-size:11px;font-weight:600;padding:4px 8px;cursor:pointer;flex-shrink:0;white-space:nowrap">← Atrás</button>
     <button class="bni on" onclick="goPage('pgDash',this)"><span class="bni-i">📊</span>Dash</button>
     <button class="bni" onclick="goPage('pgInv',this)"><span class="bni-i">📦</span>Inv.</button>
     <button class="bni" id="navMov" onclick="goPage('pgMov',this)"><span class="bni-i">🔄</span>Mov.</button>
@@ -1003,7 +1001,7 @@ function goPage(id, btn) {
   if (id==='pgPlan') { loadPlan(); }
   // Mostrar botón regreso si no estamos en Dash
   const backBtn = document.getElementById('backBtn');
-  if (backBtn) backBtn.style.display = (id === 'pgDash') ? 'none' : 'block';
+  if (backBtn) backBtn.style.display = (id === 'pgDash') ? 'none' : 'inline-block';
 }
 function goBack() {
   if (pageHistory.length <= 1) { 
