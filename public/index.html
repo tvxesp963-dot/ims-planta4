@@ -1067,13 +1067,13 @@ function renderInv() {
     } else if (invFam!=='TODOS' && i.familia!==invFam) {
       return false;
     }
-    return !q||i.pn.toLowerCase().includes(q)||i.desc.toLowerCase().includes(q);
+    const pn=i.pn||''; const desc=i.desc||''; return !q||pn.toLowerCase().includes(q)||desc.toLowerCase().includes(q);
   });
   const el = document.getElementById('invList');
   if (!f.length) { el.innerHTML='<div class="empty">📦<br>Sin resultados</div>'; return; }
   el.innerHTML = f.slice(0,80).map(item=>{
     const idx = items.indexOf(item);
-    var canEdit=user&&(user.role==='admin'||user.role==='operador'); return '<div class="ir" style="display:flex;align-items:center"><div onclick="openItem('+idx+')" style="flex:1;min-width:0;cursor:pointer"><div class="ir-pn">'+item.pn+'</div><div class="ir-d">'+item.desc+'</div><div class="ir-tags"><span class="pill '+(item.estatus==="DONE"?"pd":"pp")+'">'+item.estatus+'</span><span class="pill pl">📍'+(item.ubicacion||'Almacén')+'</span></div></div><div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="ir-s" style="color:'+(item.actual>0?'var(--accent)':'var(--text2)')+'">'+item.actual.toLocaleString()+'</div><div style="font-size:9px;color:var(--text2)">'+item.familia+'</div>'+(canEdit?'<button onclick="event.stopPropagation();openEdit('+idx+')" style="background:rgba(77,166,255,.15);border:1px solid rgba(77,166,255,.3);border-radius:6px;color:var(--accent);font-size:11px;padding:2px 8px;cursor:pointer">Editar</button>':'')+'</div></div>';
+    var canEdit=user&&(user.role==='admin'||user.role==='operador'); return '<div class="ir" style="display:flex;align-items:center"><div onclick="openItem('+idx+')" style="flex:1;min-width:0;cursor:pointer"><div class="ir-pn">'+item.pn+'</div><div class="ir-d">'+item.desc+'</div><div class="ir-tags"><span class="pill '+(item.estatus==="DONE"?"pd":"pp")+'">'+item.estatus+'</span><span class="pill pl">📍'+(item.ubicacion||'Almacén')+'</span></div></div><div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="ir-s" style="color:'+(item.actual>0?'var(--accent)':'var(--text2)')+'">'+(parseFloat(item.actual)||0).toLocaleString()+'</div><div style="font-size:9px;color:var(--text2)">'+item.familia+'</div>'+(canEdit?'<button onclick="event.stopPropagation();openEdit('+idx+')" style="background:rgba(77,166,255,.15);border:1px solid rgba(77,166,255,.3);border-radius:6px;color:var(--accent);font-size:11px;padding:2px 8px;cursor:pointer">Editar</button>':'')+'</div></div>';
   }).join('') + (f.length>80?'<div class="empty">+'+( f.length-80)+' más</div>':'');
 }
 
@@ -1083,13 +1083,13 @@ function openItem(idx) {
   document.getElementById('mSub').textContent = i.desc+' · '+i.familia;
   const hist = (i.historial||[]).slice(-5).reverse();
   document.getElementById('mBody').innerHTML =
-    '<div class="mrow"><span class="ml">Stock actual</span><span class="mv" style="color:var(--accent);font-size:16px">'+i.actual.toLocaleString()+' pzas</span></div>'+
+    '<div class="mrow"><span class="ml">Stock actual</span><span class="mv" style="color:var(--accent);font-size:16px">'+(parseFloat(i.actual)||0).toLocaleString()+' pzas</span></div>'+
     '<div class="mrow"><span class="ml">Ubicación</span><span class="mv" style="color:var(--green)">📍 '+(i.ubicacion||'Almacén')+'</span></div>'+
-    '<div class="mrow"><span class="ml">Inv. inicial</span><span class="mv">'+i.inicial.toLocaleString()+'</span></div>'+
-    '<div class="mrow"><span class="ml">Entradas</span><span class="mv" style="color:var(--green)">+'+i.entradas.toLocaleString()+'</span></div>'+
-    '<div class="mrow"><span class="ml">Salidas</span><span class="mv" style="color:var(--red)">-'+i.salidas.toLocaleString()+'</span></div>'+
-    '<div class="mrow"><span class="ml">Precio unit.</span><span class="mv">$'+i.precio.toFixed(4)+'</span></div>'+
-    '<div class="mrow"><span class="ml">Valor total</span><span class="mv" style="color:var(--amber)">$'+(i.actual*i.precio).toFixed(2)+'</span></div>'+
+    '<div class="mrow"><span class="ml">Inv. inicial</span><span class="mv">'+(parseFloat(i.inicial)||0).toLocaleString()+'</span></div>'+
+    '<div class="mrow"><span class="ml">Entradas</span><span class="mv" style="color:var(--green)">+'+(parseFloat(i.entradas)||0).toLocaleString()+'</span></div>'+
+    '<div class="mrow"><span class="ml">Salidas</span><span class="mv" style="color:var(--red)">-'+(parseFloat(i.salidas)||0).toLocaleString()+'</span></div>'+
+    '<div class="mrow"><span class="ml">Precio unit.</span><span class="mv">$'+(parseFloat(i.precio)||0).toFixed(4)+'</span></div>'+
+    '<div class="mrow"><span class="ml">Valor total</span><span class="mv" style="color:var(--amber)">$'+((parseFloat(i.actual)||0)*(parseFloat(i.precio)||0)).toFixed(2)+'</span></div>'+
     '<div style="margin:.7rem 0 .3rem;font-size:10px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.05em">Historial</div>'+
     hist.map(h=>'<div style="display:flex;justify-content:space-between;padding:.3rem 0;border-bottom:1px solid var(--border);font-size:10px"><span style="color:var(--text2)">'+fmtDate(h.fecha)+'</span><span>'+tipoIcon(h.tipo)+' '+h.qty+' pzas</span><span style="color:var(--accent)">📍'+h.loc+'</span></div>').join('')+
     '<button style="width:100%;margin-top:1rem;padding:10px;background:rgba(77,166,255,.1);border:1px solid rgba(77,166,255,.3);border-radius:9px;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer" onclick="selForMov('+idx+');closeModal()">→ Registrar movimiento</button>';
@@ -1130,14 +1130,14 @@ function renderMovList() {
   const el = document.getElementById('movList');
   if (!q) { el.innerHTML=''; return; }
   const f = items.filter(i=>i.pn.toLowerCase().includes(q)||i.desc.toLowerCase().includes(q)).slice(0,12);
-  el.innerHTML = f.map(item=>'<div class="ir" onclick="selForMov('+items.indexOf(item)+')" style="padding:.55rem .75rem;margin-bottom:.3rem"><div style="flex:1"><div class="ir-pn" style="font-size:11px">'+item.pn+'</div><div class="ir-d" style="font-size:9px">'+item.desc+' · 📍'+(item.ubicacion||'Almacén')+'</div></div><div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:var(--accent)">'+item.actual.toLocaleString()+'</div></div>').join('');
+  el.innerHTML = f.map(item=>'<div class="ir" onclick="selForMov('+items.indexOf(item)+')" style="padding:.55rem .75rem;margin-bottom:.3rem"><div style="flex:1"><div class="ir-pn" style="font-size:11px">'+item.pn+'</div><div class="ir-d" style="font-size:9px">'+item.desc+' · 📍'+(item.ubicacion||'Almacén')+'</div></div><div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:var(--accent)">'+(parseFloat(item.actual)||0).toLocaleString()+'</div></div>').join('');
 }
 
 function selForMov(idx) {
   selIdx = idx;
   const i = items[idx];
   document.getElementById('mfPN').textContent = i.pn+' · '+i.desc;
-  document.getElementById('mfSt').textContent = 'Stock: '+i.actual.toLocaleString()+' pzas · 📍'+(i.ubicacion||'Almacén');
+  document.getElementById('mfSt').textContent = 'Stock: '+(parseFloat(i.actual)||0).toLocaleString()+' pzas · 📍'+(i.ubicacion||'Almacén');
   document.getElementById('mfQty').value = 1;
   document.getElementById('movList').innerHTML='';
   document.getElementById('movS').value='';
@@ -1519,11 +1519,11 @@ function buildAdmin() {
   const tb = document.getElementById('pendBody');
   if (!tb) return;
   const pending = items.filter(i=>i.precio===0&&i.actual>0);
-  tb.innerHTML = pending.slice(0,20).map(i=>'<tr><td style="color:var(--accent)">'+i.pn+'</td><td>'+i.familia+'</td><td>'+i.actual.toLocaleString()+'</td></tr>').join('') || '<tr><td colspan="3" style="color:var(--text2);text-align:center">Sin pendientes ✓</td></tr>';
+  tb.innerHTML = pending.slice(0,20).map(i=>'<tr><td style="color:var(--accent)">'+i.pn+'</td><td>'+i.familia+'</td><td>'+(parseFloat(i.actual)||0).toLocaleString()+'</td></tr>').join('') || '<tr><td colspan="3" style="color:var(--text2);text-align:center">Sin pendientes ✓</td></tr>';
 }
 function exportCSV() {
   const rows=[['PN','Descripción','Familia','Inv.Inicial','Entradas','Salidas','Stock','Precio','Valor','Estatus','Ubicación']];
-  items.forEach(i=>rows.push([i.pn,i.desc,i.familia,i.inicial,i.entradas,i.salidas,i.actual,i.precio,(i.actual*i.precio).toFixed(2),i.estatus,i.ubicacion||'Almacén']));
+  items.forEach(i=>rows.push([i.pn,i.desc,i.familia,i.inicial,i.entradas,i.salidas,i.actual,i.precio,((parseFloat(i.actual)||0)*(parseFloat(i.precio)||0)).toFixed(2),i.estatus,i.ubicacion||'Almacén']));
   const csv=rows.map(r=>r.join(',')).join('\n');
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='IMS_'+new Date().toISOString().split('T')[0]+'.csv';a.click();
   toast('✅ CSV descargado','ok');
