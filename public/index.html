@@ -221,7 +221,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 <div id="app">
   <div class="topbar">
     <div class="tb-l">
-      <div class="tb-logo">📦 IMS</div>
+      <div class="tb-logo">📦 IMS · P4</div>
       <div style="width:1px;height:16px;background:var(--border2);margin:0 4px"></div>
       <div style="font-size:10px;color:var(--text2)" id="tbDate"></div>
     </div>
@@ -635,6 +635,7 @@ const MASTER = [
 let items = JSON.parse(localStorage.getItem('ims4_items')||'null') || MASTER.map(r=>({...r,entradas:0,salidas:0,actual:r.inicial,ubicacion:'Almacén',historial:[{tipo:'INI',fecha:new Date().toISOString(),qty:r.inicial,loc:'Almacén',user:'Sistema',ref:'Inv. inicial'}]}));
 let movs = JSON.parse(localStorage.getItem('ims4_movs')||'[]');
 let user = JSON.parse(localStorage.getItem('ims4_user')||'null');
+let _blockSnapshot = false;
 let selIdx = null, movTipo = 'E', invFam = 'TODOS', histFam = 'TODOS', selRole = 'admin';
 let db = null, auth = null, unsub = null;
 
@@ -838,6 +839,7 @@ function startSync() {
     }, () => {});
   db.collection('planta4_inventario')
     .onSnapshot(snap => {
+      if (_blockSnapshot) return;
       snap.docChanges().forEach(change => {
         const fi = change.doc.data();
         const docId = change.doc.id;
@@ -1787,7 +1789,7 @@ function doAddPN() {
   };
   items.push(ni);
   saveLocal();
-  if (db) db.collection('planta4_inventario').doc(getDocId(ni.pn,ni.desc)).set(ni).catch(function(){});
+  if (db) { _blockSnapshot = true; db.collection('planta4_inventario').doc(getDocId(ni.pn,ni.desc)).set(ni).then(function(){ setTimeout(function(){ _blockSnapshot = false; }, 3000); }).catch(function(){ _blockSnapshot = false; }); }
   document.getElementById('npPN').value = '';
   document.getElementById('npD').value = '';
   document.getElementById('npS').value = '';
