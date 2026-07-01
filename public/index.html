@@ -92,14 +92,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .pill{font-size:8px;padding:2px 6px;border-radius:6px;font-weight:600}
 .pd{background:rgba(0,230,118,.1);color:var(--green)}
 .pp{background:rgba(255,179,0,.1);color:var(--amber)}
-.ir-head{display:grid;grid-template-columns:1.6fr .7fr .8fr .8fr;gap:8px;padding:4px 10px;font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);margin-bottom:4px}
-.ir-g{display:grid;grid-template-columns:1.6fr .7fr .8fr .8fr;gap:8px;align-items:center}
+.ir-head{display:grid;grid-template-columns:1.5fr .6fr .55fr .55fr .55fr .7fr .8fr;gap:6px;padding:4px 10px;font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);margin-bottom:4px}
+.ir-g{display:grid;grid-template-columns:1.5fr .6fr .55fr .55fr .55fr .7fr .8fr;gap:6px;align-items:center}
+.ir-loc{text-align:center;font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:600;color:var(--green)}
+.ir-loc.na{color:var(--text3)}
 .ir-price{font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;text-align:right;color:var(--amber)}
 .ir-price.na{font-size:11px;font-weight:600;color:var(--text2)}
 @media (max-width:420px){
   .ir-head{display:none}
   .ir-g{display:flex;align-items:center}
   .ir-g>.ir-c-fam{display:none}
+  .ir-g>.ir-c-loc{display:none}
   .ir-price{font-size:11px}
 }
 .pl{background:rgba(77,166,255,.1);color:var(--accent)}
@@ -287,7 +290,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       </div>
       <button onclick="exportExcel()" style="background:var(--green2);color:#fff;border:none;border-radius:7px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:'DM Sans',sans-serif">↓ Excel</button>
     </div>
-    <div class="ir-head"><div>Part Number</div><div style="text-align:center">Familia</div><div style="text-align:right">Stock</div><div style="text-align:right">Precio USD</div></div>
+    <div class="ir-head"><div>Part Number</div><div style="text-align:center">Familia</div><div style="text-align:center">Loc1</div><div style="text-align:center">Loc2</div><div style="text-align:center">Loc3</div><div style="text-align:right">Stock</div><div style="text-align:right">Precio USD</div></div>
     <div id="invList"></div>
   </div>
 
@@ -415,6 +418,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div class="ac" onclick="resetStock()"><div class="ac-i">🔄</div><div class="ac-l">Reset stock</div><div class="ac-s">Volver a inicial</div></div>
       <div class="ac" onclick="abrirCargaExcel()" style="border-color:rgba(0,230,118,.3)"><div class="ac-i">📥</div><div class="ac-l">Cargar Excel</div><div class="ac-s">Reemplazar inventario</div></div>
       <div class="ac" onclick="abrirImportPrecios()" style="border-color:rgba(255,179,0,.4)"><div class="ac-i">💲</div><div class="ac-l">Importar Precios</div><div class="ac-s">Desde Excel PN+Price</div></div>
+      <div class="ac" onclick="abrirImportLoc()" style="border-color:rgba(0,230,118,.4)"><div class="ac-i">📍</div><div class="ac-l">Importar Locaciones</div><div class="ac-s">Desde Excel PN+Loc1+Loc2+Loc3</div></div>
     </div>
     <div class="sh">Usuarios IMS</div>
     <div class="card" style="padding:.9rem">
@@ -1094,7 +1098,8 @@ function renderInv() {
     var precio=parseFloat(item.precio)||0;
     var precioHtml=precio>0?('$'+precio.toFixed(4)):'Sin precio';
     var precioCls=precio>0?'ir-price':'ir-price na';
-    return '<div class="ir ir-g"><div onclick="openItem('+idx+')" style="min-width:0;cursor:pointer"><div class="ir-pn">'+item.pn+'</div><div class="ir-d">'+item.desc+'</div><div class="ir-tags"><span class="pill '+(item.estatus==="DONE"?"pd":"pp")+'">'+item.estatus+'</span><span class="pill pl">📍'+(item.ubicacion||'Almacén')+'</span></div></div><div class="ir-c-fam" style="text-align:center;font-size:9px;color:var(--text2)">'+item.familia+'</div><div class="ir-s" style="color:'+(item.actual>0?'var(--accent)':'var(--text2)')+'">'+(parseFloat(item.actual)||0).toLocaleString()+'</div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="'+precioCls+'">'+precioHtml+'</div>'+(canEdit?'<button onclick="event.stopPropagation();openEdit('+idx+')" style="background:rgba(77,166,255,.15);border:1px solid rgba(77,166,255,.3);border-radius:6px;color:var(--accent);font-size:11px;padding:2px 8px;cursor:pointer">Editar</button>':'')+'</div></div>';
+    function locCell(v){ v=(v===undefined||v===null||v==='')?null:v; return '<div class="ir-c-loc ir-loc'+(v===null?' na':'')+'">'+(v===null?'—':(parseFloat(v)||0).toLocaleString())+'</div>'; }
+    return '<div class="ir ir-g"><div onclick="openItem('+idx+')" style="min-width:0;cursor:pointer"><div class="ir-pn">'+item.pn+'</div><div class="ir-d">'+item.desc+'</div><div class="ir-tags"><span class="pill '+(item.estatus==="DONE"?"pd":"pp")+'">'+item.estatus+'</span><span class="pill pl">📍'+(item.ubicacion||'Almacén')+'</span></div></div><div class="ir-c-fam" style="text-align:center;font-size:9px;color:var(--text2)">'+item.familia+'</div>'+locCell(item.loc1)+locCell(item.loc2)+locCell(item.loc3)+'<div class="ir-s" style="color:'+(item.actual>0?'var(--accent)':'var(--text2)')+'">'+(parseFloat(item.actual)||0).toLocaleString()+'</div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="'+precioCls+'">'+precioHtml+'</div>'+(canEdit?'<button onclick="event.stopPropagation();openEdit('+idx+')" style="background:rgba(77,166,255,.15);border:1px solid rgba(77,166,255,.3);border-radius:6px;color:var(--accent);font-size:11px;padding:2px 8px;cursor:pointer">Editar</button>':'')+'</div></div>';
   }).join('') + (f.length>80?'<div class="empty">+'+( f.length-80)+' más</div>':'');
 }
 
@@ -2025,6 +2030,67 @@ function xlsConfirmar(){
   </div>
 </div>
 
+<!-- ===== MODAL: IMPORTAR LOCACIONES ===== -->
+<div id="modalImportLoc" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:700;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px);padding:0">
+  <div style="background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:1.5rem 1.2rem 2.5rem;border-top:1px solid var(--border2);max-height:88vh;overflow-y:auto;position:relative">
+    <div style="width:36px;height:3px;border-radius:2px;background:var(--border2);margin:0 auto 1.2rem"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem">
+      <div style="font-family:'Rajdhani',sans-serif;font-size:17px;font-weight:700">📍 Importar Locaciones</div>
+      <button onclick="cerrarImportLoc()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:1rem">Carga tu Excel con columnas <b style="color:var(--accent)">PN</b>, <b style="color:var(--accent)">Loc1</b>, <b style="color:var(--accent)">Loc2</b> y <b style="color:var(--accent)">Loc3</b> — actualiza las 3 locaciones de un clic</div>
+
+    <div id="ilStep1">
+      <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:.85rem;margin-bottom:.8rem">
+        <div style="font-size:10px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem">Formato requerido</div>
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:5px 8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border)">PN</th>
+              <th style="text-align:center;padding:5px 8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border)">Loc1</th>
+              <th style="text-align:center;padding:5px 8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border)">Loc2</th>
+              <th style="text-align:center;padding:5px 8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border)">Loc3</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding:5px 8px;border:1px solid var(--border);color:var(--text);font-family:monospace">GH68-52797P</td>
+              <td style="padding:5px 8px;border:1px solid var(--border);color:var(--green);text-align:center">1800</td>
+              <td style="padding:5px 8px;border:1px solid var(--border);color:var(--green);text-align:center">900</td>
+              <td style="padding:5px 8px;border:1px solid var(--border);color:var(--green);text-align:center">0</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="font-size:10px;color:var(--text2);margin-top:.5rem">Deja vacía cualquier columna que no aplique — no borra las demás.</div>
+      </div>
+
+      <div style="background:var(--bg3);border:1px dashed rgba(0,230,118,.4);border-radius:10px;padding:1.2rem;text-align:center;cursor:pointer;margin-bottom:.8rem" onclick="document.getElementById('ilFileInput').click()">
+        <div style="font-size:28px;margin-bottom:.4rem">📂</div>
+        <div style="font-size:13px;font-weight:600;color:var(--green)" id="ilFileName">Seleccionar archivo Excel</div>
+        <div style="font-size:10px;color:var(--text2);margin-top:3px">.xlsx o .xls</div>
+      </div>
+      <input type="file" id="ilFileInput" accept=".xlsx,.xls" style="display:none" onchange="ilLeerArchivo(this)">
+
+      <div id="ilError" style="display:none;background:rgba(255,68,68,.1);border:1px solid rgba(255,68,68,.3);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--red);margin-bottom:.8rem"></div>
+
+      <button id="ilBtnConf" onclick="ilAplicar()" style="display:none;width:100%;padding:13px;background:var(--green);color:#000;border:none;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;font-family:'Rajdhani',sans-serif;letter-spacing:.5px"></button>
+    </div>
+
+    <div id="ilStep2" style="display:none;text-align:center;padding:1.5rem 0">
+      <div style="font-size:36px;margin-bottom:.8rem" id="ilDoneIcon">⏳</div>
+      <div style="font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;color:var(--text)" id="ilDoneMsg">Aplicando locaciones...</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:.4rem" id="ilDoneSub"></div>
+    </div>
+
+    <div id="ilPreview" style="display:none;margin-top:.8rem">
+      <div style="font-size:10px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem" id="ilPreviewTitle"></div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:11px" id="ilPreviewTable"></table>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 var _ipDatos={};
@@ -2190,6 +2256,162 @@ function ipAplicar(){
     setTimeout(cerrarImportPrecios,2200);
   }
 }
+
+// ── IMPORTAR LOCACIONES ──
+var _ilDatos={};
+
+function abrirImportLoc(){
+  _ilDatos={};
+  document.getElementById('ilFileName').textContent='Seleccionar archivo Excel';
+  document.getElementById('ilFileInput').value='';
+  document.getElementById('ilError').style.display='none';
+  document.getElementById('ilBtnConf').style.display='none';
+  document.getElementById('ilStep1').style.display='block';
+  document.getElementById('ilStep2').style.display='none';
+  document.getElementById('ilPreview').style.display='none';
+  var m=document.getElementById('modalImportLoc');
+  m.style.display='flex';
+}
+window.abrirImportLoc=abrirImportLoc;
+
+function cerrarImportLoc(){
+  document.getElementById('modalImportLoc').style.display='none';
+}
+window.cerrarImportLoc=cerrarImportLoc;
+
+function ilError(msg){
+  var el=document.getElementById('ilError');
+  el.style.display='block';
+  el.textContent='⚠️ '+msg;
+  document.getElementById('ilBtnConf').style.display='none';
+}
+
+function ilParseNum(val){
+  if(val===null||val===undefined||val==='')return null;
+  if(typeof val==='number')return val;
+  var n=parseFloat(String(val).replace(/[$\s,]/g,''));
+  return isNaN(n)?null:n;
+}
+
+function ilLeerArchivo(input){
+  var file=input.files[0];
+  if(!file)return;
+  document.getElementById('ilFileName').textContent=file.name;
+  document.getElementById('ilError').style.display='none';
+  document.getElementById('ilPreview').style.display='none';
+  document.getElementById('ilBtnConf').style.display='none';
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      var pnCands=['PN','Part Number','part number','PART NUMBER','PartNumber'];
+      var l1Cands=['Loc1','LOC1','loc1'];
+      var l2Cands=['Loc2','LOC2','loc2'];
+      var l3Cands=['Loc3','LOC3','loc3'];
+      var hRow=-1,pnC=-1,l1C=-1,l2C=-1,l3C=-1,raw=null;
+      for(var si=0;si<wb.SheetNames.length;si++){
+        var ws=wb.Sheets[wb.SheetNames[si]];
+        var r=XLSX.utils.sheet_to_json(ws,{header:1});
+        for(var i=0;i<Math.min(r.length,5);i++){
+          var pc=ipFindCol(r[i],pnCands);
+          var l1=ipFindCol(r[i],l1Cands);
+          var l2=ipFindCol(r[i],l2Cands);
+          var l3=ipFindCol(r[i],l3Cands);
+          if(pc>=0&&(l1>=0||l2>=0||l3>=0)){hRow=i;pnC=pc;l1C=l1;l2C=l2;l3C=l3;raw=r;break;}
+        }
+        if(raw)break;
+      }
+      if(!raw||hRow<0){return ilError('No se reconocen las columnas. Acepta: PN + Loc1/Loc2/Loc3 (al menos una)');}
+      var map={},count=0;
+      for(var i=hRow+1;i<raw.length;i++){
+        var row=raw[i];
+        var pn=row[pnC]?String(row[pnC]).trim():null;
+        if(!pn)continue;
+        var entry={};
+        var has=false;
+        if(l1C>=0){var v1=ilParseNum(row[l1C]);if(v1!==null){entry.loc1=v1;has=true;}}
+        if(l2C>=0){var v2=ilParseNum(row[l2C]);if(v2!==null){entry.loc2=v2;has=true;}}
+        if(l3C>=0){var v3=ilParseNum(row[l3C]);if(v3!==null){entry.loc3=v3;has=true;}}
+        if(has){map[pn]=entry;count++;}
+      }
+      if(!count){return ilError('No se encontraron locaciones válidas en el archivo.');}
+      _ilDatos=map;
+      document.getElementById('ilBtnConf').style.display='block';
+      document.getElementById('ilBtnConf').textContent='✓ Aplicar locaciones a '+count+' PN';
+      var matched=0;
+      if(typeof items!=='undefined'){
+        items.forEach(function(it){if(map[it.pn]!==undefined)matched++;});
+      }
+      var prev=document.getElementById('ilPreview');
+      var prevTitle=document.getElementById('ilPreviewTitle');
+      var prevTable=document.getElementById('ilPreviewTable');
+      prevTitle.textContent='Vista previa (primeros 6 de '+count+' — '+matched+' coinciden con el inventario)';
+      var shown=Object.keys(map).slice(0,6);
+      prevTable.innerHTML='<thead><tr><th style="text-align:left;padding:5px 8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border)">Part Number</th><th style="text-align:center;padding:5px 8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border)">Loc1</th><th style="text-align:center;padding:5px 8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border)">Loc2</th><th style="text-align:center;padding:5px 8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border)">Loc3</th></tr></thead><tbody>'+
+        shown.map(function(pn){var e=map[pn];return '<tr><td style="padding:5px 8px;border:1px solid var(--border);font-family:monospace;font-size:10px;color:var(--text)">'+pn+'</td><td style="padding:5px 8px;border:1px solid var(--border);text-align:center;color:var(--green)">'+(e.loc1!==undefined?e.loc1:'—')+'</td><td style="padding:5px 8px;border:1px solid var(--border);text-align:center;color:var(--green)">'+(e.loc2!==undefined?e.loc2:'—')+'</td><td style="padding:5px 8px;border:1px solid var(--border);text-align:center;color:var(--green)">'+(e.loc3!==undefined?e.loc3:'—')+'</td></tr>';}).join('')+
+      '</tbody>';
+      prev.style.display='block';
+    }catch(err){ilError('Error leyendo el archivo: '+err.message);}
+  };
+  reader.readAsArrayBuffer(file);
+}
+window.ilLeerArchivo=ilLeerArchivo;
+
+function ilAplicar(){
+  if(!Object.keys(_ilDatos).length)return;
+  document.getElementById('ilStep1').style.display='none';
+  document.getElementById('ilPreview').style.display='none';
+  document.getElementById('ilStep2').style.display='block';
+  document.getElementById('ilDoneIcon').textContent='⏳';
+  document.getElementById('ilDoneMsg').textContent='Aplicando locaciones...';
+  document.getElementById('ilDoneSub').textContent='';
+
+  var updated=0;
+  var targets=[];
+  if(typeof items!=='undefined'){
+    items.forEach(function(it){
+      var e=_ilDatos[it.pn];
+      if(e!==undefined){
+        if(e.loc1!==undefined)it.loc1=e.loc1;
+        if(e.loc2!==undefined)it.loc2=e.loc2;
+        if(e.loc3!==undefined)it.loc3=e.loc3;
+        updated++;
+        targets.push(it);
+      }
+    });
+    if(typeof saveLocal==='function')saveLocal();
+    if(typeof renderInv==='function')renderInv();
+  }
+
+  if(typeof db==='undefined'||!db||!updated){
+    document.getElementById('ilDoneIcon').textContent='✅';
+    document.getElementById('ilDoneMsg').textContent=updated+' PN actualizados (local)';
+    document.getElementById('ilDoneSub').textContent='';
+    setTimeout(cerrarImportLoc,2200);
+    return;
+  }
+
+  var okList=[],failList=[],idx=0;
+  function next(){
+    if(idx>=targets.length){
+      document.getElementById('ilDoneIcon').textContent=failList.length?'⚠️':'✅';
+      document.getElementById('ilDoneMsg').textContent=okList.length+' PN guardados en Firebase';
+      document.getElementById('ilDoneSub').textContent=failList.length?('No existen en Firebase ('+failList.length+'): '+failList.slice(0,5).join(', ')+(failList.length>5?' y '+(failList.length-5)+' más':'')):'Todos guardados correctamente';
+      if(typeof toast==='function')toast(okList.length+' locaciones guardadas'+(failList.length?', '+failList.length+' sin match en Firebase':''),failList.length?'warn':'ok');
+      setTimeout(cerrarImportLoc,failList.length?5000:2200);
+      return;
+    }
+    var it=targets[idx];
+    var upd={};
+    var e=_ilDatos[it.pn];
+    if(e.loc1!==undefined)upd.loc1=it.loc1;
+    if(e.loc2!==undefined)upd.loc2=it.loc2;
+    if(e.loc3!==undefined)upd.loc3=it.loc3;
+    db.collection('planta4_inventario').doc(typeof getDocId==='function'?getDocId(it.pn,it.desc):it.pn).update(upd).then(function(){okList.push(it.pn);}).catch(function(){failList.push(it.pn);}).finally(function(){idx++;next();});
+  }
+  next();
+}
+window.ilAplicar=ilAplicar;
 </script>
 
 </body>
