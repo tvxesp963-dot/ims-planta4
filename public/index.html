@@ -479,7 +479,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       </div>
       <button class="btn-conf bc-E" onclick="doAddPN()">+ Agregar PN</button>
     </div>
-    <div class="sh">Pendientes de precio</div>
+    <div class="sh" style="display:flex;justify-content:space-between;align-items:center">Pendientes de precio<button onclick="exportPendientesPrecio()" style="background:rgba(255,179,0,.15);border:1px solid rgba(255,179,0,.4);border-radius:6px;color:var(--amber);font-size:10px;font-weight:600;padding:4px 8px;cursor:pointer">📥 Exportar Excel</button></div>
     <div class="table-w"><table class="dt"><thead><tr><th>Part Number</th><th>Fam.</th><th>Stock</th></tr></thead><tbody id="pendBody"></tbody></table></div>
   </div>
 
@@ -1580,6 +1580,27 @@ function exportExcel() {
   toast('✅ Excel descargado · '+filtrados.length+' partes', 'ok');
 }
 window.exportExcel = exportExcel;
+
+function exportPendientesPrecio() {
+  if (typeof XLSX === 'undefined') { toast('❌ Librería Excel no cargada', 'err'); return; }
+  const pend = items.filter(i=>i.precio===0&&i.actual>0);
+  if (!pend.length) { toast('✅ No hay pendientes de precio', 'ok'); return; }
+
+  const rows = [['PN','Descripción','Familia','Stock','Price']];
+  pend.forEach(function(i){
+    rows.push([i.pn||'', i.desc||'', i.familia||'', Number(i.actual)||0, '']);
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:14},{wch:32},{wch:10},{wch:9},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Pendientes');
+
+  const fecha = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, 'IMS_P4_PendientesPrecio_'+fecha+'.xlsx');
+  toast('✅ Excel descargado · '+pend.length+' partes pendientes', 'ok');
+}
+window.exportPendientesPrecio = exportPendientesPrecio;
 
 // ── ORDEN DE PREPARACIÓN (IMS) ──
 var planActivo = null;
