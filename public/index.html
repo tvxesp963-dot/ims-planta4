@@ -2148,10 +2148,24 @@ function ipAplicar(){
       if(typeof toast==='function')toast('Precios importados: '+updated+' PN','ok');
       setTimeout(cerrarImportPrecios,2200);
     }).catch(function(err){
-      document.getElementById('ipDoneIcon').textContent='⚠️';
-      document.getElementById('ipDoneMsg').textContent=updated+' precios actualizados (local)';
-      document.getElementById('ipDoneSub').textContent='Firebase: '+err.message;
-      setTimeout(cerrarImportPrecios,3000);
+      document.getElementById('ipDoneMsg').textContent='Reintentando uno por uno...';
+      document.getElementById('ipDoneSub').textContent='';
+      var okList=[],failList=[];
+      var targets=items.filter(function(it){return _ipDatos[it.pn]!==undefined;});
+      var idx=0;
+      function next(){
+        if(idx>=targets.length){
+          document.getElementById('ipDoneIcon').textContent=failList.length?'⚠️':'✅';
+          document.getElementById('ipDoneMsg').textContent=okList.length+' precios guardados en Firebase';
+          document.getElementById('ipDoneSub').textContent=failList.length?('No existen en Firebase ('+failList.length+'): '+failList.slice(0,5).join(', ')+(failList.length>5?' y '+(failList.length-5)+' más':''):'Todos guardados correctamente';
+          if(typeof toast==='function')toast(okList.length+' precios guardados'+(failList.length?', '+failList.length+' sin match en Firebase':''),failList.length?'warn':'ok');
+          setTimeout(cerrarImportPrecios,failList.length?5000:2200);
+          return;
+        }
+        var it=targets[idx];
+        db.collection('planta4_inventario').doc(typeof getDocId==='function'?getDocId(it.pn,it.desc):it.pn).update({precio:it.precio}).then(function(){okList.push(it.pn);}).catch(function(){failList.push(it.pn);}).finally(function(){idx++;next();});
+      }
+      next();
     });
   } else {
     document.getElementById('ipDoneIcon').textContent='✅';
