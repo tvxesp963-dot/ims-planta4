@@ -92,6 +92,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .pill{font-size:8px;padding:2px 6px;border-radius:6px;font-weight:600}
 .pd{background:rgba(0,230,118,.1);color:var(--green)}
 .pp{background:rgba(255,179,0,.1);color:var(--amber)}
+.ir-head{display:grid;grid-template-columns:1.6fr .7fr .8fr .8fr;gap:8px;padding:4px 10px;font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);margin-bottom:4px}
+.ir-g{display:grid;grid-template-columns:1.6fr .7fr .8fr .8fr;gap:8px;align-items:center}
+.ir-price{font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;text-align:right;color:var(--amber)}
+.ir-price.na{font-size:11px;font-weight:600;color:var(--text2)}
+@media (max-width:420px){
+  .ir-head{display:none}
+  .ir-g{display:flex;align-items:center}
+  .ir-g>.ir-c-fam{display:none}
+  .ir-price{font-size:11px}
+}
 .pl{background:rgba(77,166,255,.1);color:var(--accent)}
 .tcard{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:.85rem;margin-bottom:.5rem}
 .tflow{display:flex;align-items:center;margin-top:.6rem;overflow-x:auto}
@@ -277,6 +287,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       </div>
       <button onclick="exportExcel()" style="background:var(--green2);color:#fff;border:none;border-radius:7px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:'DM Sans',sans-serif">↓ Excel</button>
     </div>
+    <div class="ir-head"><div>Part Number</div><div style="text-align:center">Familia</div><div style="text-align:right">Stock</div><div style="text-align:right">Precio USD</div></div>
     <div id="invList"></div>
   </div>
 
@@ -1079,7 +1090,11 @@ function renderInv() {
   if (!f.length) { el.innerHTML='<div class="empty">📦<br>Sin resultados</div>'; return; }
   el.innerHTML = f.slice(0,80).map(item=>{
     const idx = items.indexOf(item);
-    var canEdit=user&&(user.role==='admin'||user.role==='operador'); return '<div class="ir" style="display:flex;align-items:center"><div onclick="openItem('+idx+')" style="flex:1;min-width:0;cursor:pointer"><div class="ir-pn">'+item.pn+'</div><div class="ir-d">'+item.desc+'</div><div class="ir-tags"><span class="pill '+(item.estatus==="DONE"?"pd":"pp")+'">'+item.estatus+'</span><span class="pill pl">📍'+(item.ubicacion||'Almacén')+'</span></div></div><div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="ir-s" style="color:'+(item.actual>0?'var(--accent)':'var(--text2)')+'">'+(parseFloat(item.actual)||0).toLocaleString()+'</div><div style="font-size:9px;color:var(--text2)">'+item.familia+'</div>'+(canEdit?'<button onclick="event.stopPropagation();openEdit('+idx+')" style="background:rgba(77,166,255,.15);border:1px solid rgba(77,166,255,.3);border-radius:6px;color:var(--accent);font-size:11px;padding:2px 8px;cursor:pointer">Editar</button>':'')+'</div></div>';
+    var canEdit=user&&(user.role==='admin'||user.role==='operador');
+    var precio=parseFloat(item.precio)||0;
+    var precioHtml=precio>0?('$'+precio.toFixed(4)):'Sin precio';
+    var precioCls=precio>0?'ir-price':'ir-price na';
+    return '<div class="ir ir-g"><div onclick="openItem('+idx+')" style="min-width:0;cursor:pointer"><div class="ir-pn">'+item.pn+'</div><div class="ir-d">'+item.desc+'</div><div class="ir-tags"><span class="pill '+(item.estatus==="DONE"?"pd":"pp")+'">'+item.estatus+'</span><span class="pill pl">📍'+(item.ubicacion||'Almacén')+'</span></div></div><div class="ir-c-fam" style="text-align:center;font-size:9px;color:var(--text2)">'+item.familia+'</div><div class="ir-s" style="color:'+(item.actual>0?'var(--accent)':'var(--text2)')+'">'+(parseFloat(item.actual)||0).toLocaleString()+'</div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="'+precioCls+'">'+precioHtml+'</div>'+(canEdit?'<button onclick="event.stopPropagation();openEdit('+idx+')" style="background:rgba(77,166,255,.15);border:1px solid rgba(77,166,255,.3);border-radius:6px;color:var(--accent);font-size:11px;padding:2px 8px;cursor:pointer">Editar</button>':'')+'</div></div>';
   }).join('') + (f.length>80?'<div class="empty">+'+( f.length-80)+' más</div>':'');
 }
 
