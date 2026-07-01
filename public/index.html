@@ -2157,7 +2157,7 @@ function ipAplicar(){
         if(idx>=targets.length){
           document.getElementById('ipDoneIcon').textContent=failList.length?'⚠️':'✅';
           document.getElementById('ipDoneMsg').textContent=okList.length+' precios guardados en Firebase';
-          document.getElementById('ipDoneSub').textContent=failList.length?('No existen en Firebase ('+failList.length+'): '+failList.slice(0,5).join(', ')+(failList.length>5?' y '+(failList.length-5)+' más':''):'Todos guardados correctamente';
+          document.getElementById('ipDoneSub').textContent=failList.length?('No existen en Firebase ('+failList.length+'): '+failList.slice(0,5).join(', ')+(failList.length>5?' y '+(failList.length-5)+' más':'')):'Todos guardados correctamente';
           if(typeof toast==='function')toast(okList.length+' precios guardados'+(failList.length?', '+failList.length+' sin match en Firebase':''),failList.length?'warn':'ok');
           setTimeout(cerrarImportPrecios,failList.length?5000:2200);
           return;
