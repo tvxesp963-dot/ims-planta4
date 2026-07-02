@@ -98,12 +98,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .ir-loc.na{color:var(--text3)}
 .ir-price{font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;text-align:right;color:var(--amber)}
 .ir-price.na{font-size:11px;font-weight:600;color:var(--text2)}
+.ir-loc-mobile{display:none}
+.ir-loc-b{font-size:8px;color:var(--text2);background:rgba(255,255,255,.05);padding:2px 6px;border-radius:5px;font-weight:600}
+.ir-loc-b b{color:var(--green);font-weight:700}
+.ir-loc-b.na b{color:var(--text3)}
 @media (max-width:420px){
   .ir-head{display:none}
   .ir-g{display:flex;align-items:center}
   .ir-g>.ir-c-fam{display:none}
   .ir-g>.ir-c-loc{display:none}
   .ir-price{font-size:11px}
+  .ir-loc-mobile{display:flex;gap:7px;margin-top:4px;flex-wrap:wrap}
 }
 .pl{background:rgba(77,166,255,.1);color:var(--accent)}
 .tcard{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:.85rem;margin-bottom:.5rem}
@@ -1097,7 +1102,9 @@ function renderInv() {
     var precioHtml=precio>0?('$'+precio.toFixed(4)):'Sin precio';
     var precioCls=precio>0?'ir-price':'ir-price na';
     function locCell(v){ v=(v===undefined||v===null||v==='')?null:v; return '<div class="ir-c-loc ir-loc'+(v===null?' na':'')+'">'+(v===null?'—':(parseFloat(v)||0).toLocaleString())+'</div>'; }
-    return '<div class="ir ir-g"><div onclick="openItem('+idx+')" style="min-width:0;cursor:pointer"><div class="ir-pn">'+item.pn+'</div><div class="ir-d">'+item.desc+'</div><div class="ir-tags"><span class="pill '+(item.estatus==="DONE"?"pd":"pp")+'">'+item.estatus+'</span><span class="pill pl">📍'+(item.ubicacion||'Almacén')+'</span></div></div><div class="ir-c-fam" style="text-align:center;font-size:9px;color:var(--text2)">'+item.familia+'</div>'+locCell(item.loc1)+locCell(item.loc2)+locCell(item.loc3)+'<div class="ir-s" style="color:'+(item.actual>0?'var(--accent)':'var(--text2)')+'">'+(parseFloat(item.actual)||0).toLocaleString()+'</div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="'+precioCls+'">'+precioHtml+'</div>'+(canEdit?'<button onclick="event.stopPropagation();openEdit('+idx+')" style="background:rgba(77,166,255,.15);border:1px solid rgba(77,166,255,.3);border-radius:6px;color:var(--accent);font-size:11px;padding:2px 8px;cursor:pointer">Editar</button>':'')+'</div></div>';
+    function locBadge(label,v){ v=(v===undefined||v===null||v==='')?null:v; return '<span class="ir-loc-b'+(v===null?' na':'')+'">'+label+' <b>'+(v===null?'—':(parseFloat(v)||0).toLocaleString())+'</b></span>'; }
+    var locMobile = '<div class="ir-loc-mobile">'+locBadge('L1',item.loc1)+locBadge('L2',item.loc2)+locBadge('L3',item.loc3)+'</div>';
+    return '<div class="ir ir-g"><div onclick="openItem('+idx+')" style="min-width:0;cursor:pointer"><div class="ir-pn">'+item.pn+'</div><div class="ir-d">'+item.desc+'</div><div class="ir-tags"><span class="pill '+(item.estatus==="DONE"?"pd":"pp")+'">'+item.estatus+'</span><span class="pill pl">📍'+(item.ubicacion||'Almacén')+'</span></div>'+locMobile+'</div><div class="ir-c-fam" style="text-align:center;font-size:9px;color:var(--text2)">'+item.familia+'</div>'+locCell(item.loc1)+locCell(item.loc2)+locCell(item.loc3)+'<div class="ir-s" style="color:'+(item.actual>0?'var(--accent)':'var(--text2)')+'">'+(parseFloat(item.actual)||0).toLocaleString()+'</div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><div class="'+precioCls+'">'+precioHtml+'</div>'+(canEdit?'<button onclick="event.stopPropagation();openEdit('+idx+')" style="background:rgba(77,166,255,.15);border:1px solid rgba(77,166,255,.3);border-radius:6px;color:var(--accent);font-size:11px;padding:2px 8px;cursor:pointer">Editar</button>':'')+'</div></div>';
   }).join('') + (f.length>80?'<div class="empty">+'+( f.length-80)+' más</div>':'');
 }
 
