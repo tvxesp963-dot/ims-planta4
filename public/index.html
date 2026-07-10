@@ -75,6 +75,27 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .fb68{background:linear-gradient(90deg,#1a6fd4,#4da6ff)}
 .fb69{background:linear-gradient(90deg,#00876a,#00e676)}
 .fb90{background:linear-gradient(90deg,#c47800,#ffb300)}
+.mon-grid{display:grid;grid-template-columns:1fr 58px 60px 44px;gap:4px;align-items:center}
+.mon-hdr{font-size:8px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;padding:0 0 4px;border-bottom:1px solid var(--border);margin-bottom:2px}
+.mon-row{padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.mon-row:last-child{border:none}
+.mon-pn{font-size:10px;font-weight:600;color:var(--accent);font-family:'Rajdhani',sans-serif}
+.mon-desc{font-size:9px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mon-stock{font-size:11px;font-weight:700;text-align:right;font-family:'Rajdhani',sans-serif}
+.mon-bar-w{height:4px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;margin-bottom:1px}
+.mon-bar-f{height:100%;border-radius:2px}
+.mon-pct{font-size:8px;color:var(--text2);text-align:right}
+.mon-badge{font-size:8px;font-weight:600;padding:2px 5px;border-radius:4px;text-align:center}
+.mon-ok{color:#085041;background:rgba(29,158,117,.18)}
+.mon-warn{color:#fbbf24;background:rgba(186,117,23,.2)}
+.mon-crit{color:#ff6b6b;background:rgba(226,75,74,.18)}
+.mon-pulse{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;margin-right:5px}
+@keyframes blink-row{0%,100%{background:transparent}50%{background:rgba(226,75,74,.08)}}
+@keyframes blink-badge{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes blink-stock{0%,100%{opacity:1}50%{opacity:.4}}
+.mon-crit-row{animation:blink-row 1.4s ease-in-out infinite}
+.mon-crit-blink{animation:blink-badge 1.4s ease-in-out infinite}
+.mon-crit-stock{animation:blink-stock 1.4s ease-in-out infinite}
 .fi2{font-size:9px;color:var(--text);text-align:right;min-width:70px}
 .sw{position:relative;margin-bottom:.7rem}
 .si{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:9px;padding:10px 38px 10px 13px;color:var(--text);font-size:13px;outline:none;font-family:'DM Sans',sans-serif;transition:border .2s;text-transform:uppercase}
@@ -264,6 +285,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div class="fr"><div class="ft2">GH69</div><div class="fb-w"><div class="fb fb69" id="b69" style="width:0%"></div></div><div class="fi2" id="f69">–</div></div>
       <div class="fr" style="border:none"><div class="ft2">GH90</div><div class="fb-w"><div class="fb fb90" id="b90" style="width:0%"></div></div><div class="fi2" id="f90">–</div></div>
     </div>
+    <div class="sh"><span class="mon-pulse"></span>Monitor stock mínimo</div>
+    <div class="fc" id="monitorStockMin" style="padding:.7rem"></div>
     <div class="sh">Últimos movimientos</div>
     <div id="dashMovs"></div>
   </div>
@@ -424,6 +447,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div class="ac" onclick="abrirCargaExcel()" style="border-color:rgba(0,230,118,.3)"><div class="ac-i">📥</div><div class="ac-l">Cargar Excel</div><div class="ac-s">Reemplazar inventario</div></div>
       <div class="ac" onclick="abrirImportPrecios()" style="border-color:rgba(255,179,0,.4)"><div class="ac-i">💲</div><div class="ac-l">Importar Precios</div><div class="ac-s">Desde Excel PN+Price</div></div>
       <div class="ac" onclick="abrirImportLoc()" style="border-color:rgba(0,230,118,.4)"><div class="ac-i">📍</div><div class="ac-l">Importar Locaciones</div><div class="ac-s">Desde Excel PN+Loc1+Loc2+Loc3</div></div>
+      <div class="ac" onclick="abrirConfigMonitor()" style="border-color:rgba(226,75,74,.4)"><div class="ac-i">⚙️</div><div class="ac-l">Stock mínimo</div><div class="ac-s">Configurar límite crítico</div></div>
     </div>
     <div class="sh">Usuarios IMS</div>
     <div class="card" style="padding:.9rem">
@@ -1071,6 +1095,65 @@ function updateDash() {
     const l=document.getElementById('f'+k); if(l) l.textContent=fams[f].p.toLocaleString()+' · $'+fams[f].v.toFixed(0);
   });
   renderDashMovs();
+  renderMonitorStock();
+}
+
+let STOCK_MIN_LIMITE = 12000;
+let STOCK_MIN_MODO = 'auto'; // 'auto' o 'manual'
+let STOCK_MIN_PNS_MANUAL = [];
+// Cargar configuración guardada desde Firestore
+if(typeof db!=='undefined'){
+  db.collection('ims_config').doc('planta4').get().then(doc=>{
+    if(doc.exists){
+      const d=doc.data();
+      if(d.stockMinLimite) STOCK_MIN_LIMITE=d.stockMinLimite;
+      if(d.stockMinModo) STOCK_MIN_MODO=d.stockMinModo;
+      if(d.stockMinPns) STOCK_MIN_PNS_MANUAL=d.stockMinPns;
+      renderMonitorStock();
+    }
+  }).catch(()=>{});
+}
+
+function renderMonitorStock() {
+  const el = document.getElementById('monitorStockMin');
+  if (!el) return;
+  const alerta = Math.round(STOCK_MIN_LIMITE*0.67);
+  let lista;
+  if(STOCK_MIN_MODO==='auto'){
+    lista = [...items].sort((a,b)=>(parseFloat(a.actual)||0)-(parseFloat(b.actual)||0)).slice(0,10)
+      .map(i=>({pn:i.pn, desc:i.desc, stock:parseFloat(i.actual)||0}));
+  } else {
+    lista = STOCK_MIN_PNS_MANUAL.map(pn=>{
+      const item = items.find(i=>(i.pn||'').toUpperCase()===pn.toUpperCase());
+      return {pn, desc:item?item.desc:'—', stock:item?(parseFloat(item.actual)||0):0};
+    });
+  }
+  function color(s){ return s>=STOCK_MIN_LIMITE?'var(--green)':s>=alerta?'var(--amber)':'#ff6b6b'; }
+  function badgeCls(s){ return s>=STOCK_MIN_LIMITE?'mon-ok':s>=alerta?'mon-warn':'mon-crit'; }
+  function badgeTxt(s){ return s>=STOCK_MIN_LIMITE?'OK':s>=alerta?'Alerta':'Crítico'; }
+  function pct(s){ return Math.min(100,Math.round((s/STOCK_MIN_LIMITE)*100)); }
+  const critCount = lista.filter(i=>i.stock<STOCK_MIN_LIMITE).length;
+  const modoLabel = STOCK_MIN_MODO==='auto'?'🤖 Automático':'📌 Manual';
+  el.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+      '<div style="font-size:9px;color:var(--text2)">Mín: <b style="color:var(--text)">'+STOCK_MIN_LIMITE.toLocaleString()+' pzas</b> · <span style="color:var(--text2)">'+modoLabel+'</span></div>'+
+      (critCount>0?'<div style="font-size:9px;color:#ff6b6b;font-weight:600">⚠ '+critCount+' bajo mínimo</div>':'<div style="font-size:9px;color:var(--green)">✓ Todo OK</div>')+
+    '</div>'+
+    '<div class="mon-grid mon-hdr"><div>Artículo</div><div style="text-align:right">Stock</div><div>Nivel</div><div style="text-align:center">Estado</div></div>'+
+    lista.map((i,idx)=>{
+      const isCrit=i.stock<alerta;
+      const delay=(isCrit?(idx*0.2):0)+'s';
+      const rowCls=isCrit?'mon-crit-row':'';
+      const stockCls=isCrit?'mon-crit-stock':'';
+      const badgeCls2=isCrit?'mon-crit-blink':'';
+      return '<div class="mon-grid mon-row '+rowCls+'" style="animation-delay:'+delay+'">'+
+        '<div><div class="mon-pn">'+i.pn+'</div><div class="mon-desc">'+i.desc+'</div></div>'+
+        '<div class="mon-stock '+stockCls+'" style="color:'+color(i.stock)+';animation-delay:'+delay+'">'+i.stock.toLocaleString()+'</div>'+
+        '<div><div class="mon-bar-w"><div class="mon-bar-f" style="width:'+pct(i.stock)+'%;background:'+color(i.stock)+'"></div></div><div class="mon-pct">'+pct(i.stock)+'%</div></div>'+
+        '<div style="text-align:center"><span class="mon-badge '+badgeCls(i.stock)+' '+badgeCls2+'" style="animation-delay:'+delay+'">'+badgeTxt(i.stock)+'</span></div>'+
+      '</div>';
+    }).join('')+
+    (lista.length===0?'<div style="text-align:center;font-size:11px;color:var(--text2);padding:10px">Sin PNs configurados</div>':'');
 }
 
 function renderDashMovs() {
@@ -2420,6 +2503,159 @@ function ilAplicar(){
   next();
 }
 window.ilAplicar=ilAplicar;
+</script>
+
+<!-- ═══ MODAL CONFIG MONITOR STOCK MÍNIMO ═══ -->
+<div id="modalConfigMonitor" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:700;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)">
+  <div style="background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:1.5rem 1.2rem 2.5rem;border-top:1px solid var(--border2);max-height:88vh;overflow-y:auto">
+    <div style="width:36px;height:3px;border-radius:2px;background:var(--border2);margin:0 auto 1.2rem"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem">
+      <div style="font-family:'Rajdhani',sans-serif;font-size:17px;font-weight:700">⚙️ Monitor stock mínimo</div>
+      <button onclick="cerrarConfigMonitor()" style="background:none;border:none;color:var(--text2);font-size:20px;cursor:pointer">✕</button>
+    </div>
+
+    <div style="font-size:10px;color:var(--text2);margin-bottom:.8rem">Modo de monitoreo</div>
+    <div style="display:flex;gap:6px;margin-bottom:1rem">
+      <div id="cfgTogAuto" onclick="cfgSetModo('auto')" style="flex:1;padding:10px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);text-align:center;cursor:pointer;font-size:11px;font-weight:600;color:var(--text2)">
+        <div style="font-size:18px;margin-bottom:3px">🤖</div>Automático
+        <div style="font-size:9px;font-weight:400;margin-top:2px;color:var(--text2)">10 con menor stock</div>
+      </div>
+      <div id="cfgTogManual" onclick="cfgSetModo('manual')" style="flex:1;padding:10px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);text-align:center;cursor:pointer;font-size:11px;font-weight:600;color:var(--text2)">
+        <div style="font-size:18px;margin-bottom:3px">📌</div>Manual
+        <div style="font-size:9px;font-weight:400;margin-top:2px;color:var(--text2)">PNs específicos</div>
+      </div>
+    </div>
+
+    <div id="cfgPanelManual" style="display:none;margin-bottom:.8rem">
+      <div style="font-size:10px;color:var(--text2);margin-bottom:6px">Agregar Part Number (máx. 10)</div>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <input id="cfgPnInput" type="text" placeholder="ej. GH68-55072A"
+          style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:9px 10px;color:var(--text);font-size:12px;font-family:'Rajdhani',sans-serif;text-transform:uppercase"
+          oninput="this.value=this.value.toUpperCase()"
+          onkeydown="if(event.key==='Enter')cfgAgregarPN()">
+        <button onclick="cfgAgregarPN()" style="background:rgba(29,158,117,.2);border:1px solid rgba(29,158,117,.4);border-radius:8px;padding:9px 12px;color:var(--green);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">+ Agregar</button>
+      </div>
+      <div id="cfgTagsWrap" style="min-height:32px;margin-bottom:6px"></div>
+    </div>
+
+    <div style="font-size:10px;color:var(--text2);margin-bottom:6px">Límite mínimo requerido (pzas)</div>
+    <input id="cfgMonLimite" type="number" min="1" step="1000"
+      style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;color:var(--text);font-size:16px;font-weight:700;font-family:'Rajdhani',sans-serif;margin-bottom:1rem"
+      oninput="cfgMonPreview()">
+
+    <div style="background:var(--bg3);border-radius:10px;padding:.8rem;margin-bottom:.8rem">
+      <div style="font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Vista previa rangos</div>
+      <div style="display:flex;gap:8px;justify-content:space-between">
+        <div style="text-align:center;flex:1"><div style="font-size:9px;color:var(--text2);margin-bottom:3px">Crítico</div><div id="cfgPrevCrit" style="font-size:12px;font-weight:700;color:#ff6b6b;font-family:'Rajdhani',sans-serif">—</div></div>
+        <div style="text-align:center;flex:1"><div style="font-size:9px;color:var(--text2);margin-bottom:3px">Alerta</div><div id="cfgPrevAlerta" style="font-size:12px;font-weight:700;color:var(--amber);font-family:'Rajdhani',sans-serif">—</div></div>
+        <div style="text-align:center;flex:1"><div style="font-size:9px;color:var(--text2);margin-bottom:3px">OK</div><div id="cfgPrevOk" style="font-size:12px;font-weight:700;color:var(--green);font-family:'Rajdhani',sans-serif">—</div></div>
+      </div>
+    </div>
+
+    <div id="cfgMonMsg" style="display:none;background:rgba(29,158,117,.1);border:1px solid rgba(29,158,117,.3);border-radius:8px;padding:.6rem .8rem;font-size:11px;color:var(--green);margin-bottom:.8rem"></div>
+
+    <div style="display:flex;gap:8px">
+      <button onclick="cerrarConfigMonitor()" style="flex:1;padding:11px;background:var(--bg3);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-size:13px;cursor:pointer">Cancelar</button>
+      <button onclick="guardarConfigMonitor()" style="flex:2;padding:11px;background:var(--green);border:none;border-radius:9px;color:#000;font-size:13px;font-weight:700;cursor:pointer">✓ Guardar configuración</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let _cfgModo = 'auto';
+let _cfgPns = [];
+
+function abrirConfigMonitor(){
+  _cfgModo = STOCK_MIN_MODO;
+  _cfgPns = [...STOCK_MIN_PNS_MANUAL];
+  document.getElementById('cfgMonLimite').value = STOCK_MIN_LIMITE;
+  document.getElementById('cfgMonMsg').style.display='none';
+  cfgSetModo(_cfgModo);
+  cfgRenderTags();
+  cfgMonPreview();
+  document.getElementById('modalConfigMonitor').style.display='flex';
+}
+
+function cerrarConfigMonitor(){
+  document.getElementById('modalConfigMonitor').style.display='none';
+}
+
+function cfgSetModo(m){
+  _cfgModo = m;
+  const accent = 'rgba(55,138,221,.15)';
+  const accentBorder = '#378ADD';
+  const norm = 'var(--bg3)';
+  const normBorder = 'var(--border2)';
+  const autoEl = document.getElementById('cfgTogAuto');
+  const manEl = document.getElementById('cfgTogManual');
+  autoEl.style.background = m==='auto'?accent:norm;
+  autoEl.style.borderColor = m==='auto'?accentBorder:normBorder;
+  autoEl.style.color = m==='auto'?'var(--accent)':'var(--text2)';
+  manEl.style.background = m==='manual'?accent:norm;
+  manEl.style.borderColor = m==='manual'?accentBorder:normBorder;
+  manEl.style.color = m==='manual'?'var(--accent)':'var(--text2)';
+  document.getElementById('cfgPanelManual').style.display = m==='manual'?'block':'none';
+}
+
+function cfgAgregarPN(){
+  const val = document.getElementById('cfgPnInput').value.trim().toUpperCase();
+  if(!val) return;
+  if(_cfgPns.includes(val)){toast('PN ya existe','err');return;}
+  if(_cfgPns.length>=10){toast('Máximo 10 PNs','err');return;}
+  _cfgPns.push(val);
+  document.getElementById('cfgPnInput').value='';
+  cfgRenderTags();
+}
+
+function cfgQuitarPN(pn){
+  _cfgPns = _cfgPns.filter(p=>p!==pn);
+  cfgRenderTags();
+}
+
+function cfgRenderTags(){
+  const wrap = document.getElementById('cfgTagsWrap');
+  wrap.innerHTML = _cfgPns.length
+    ? _cfgPns.map(p=>`<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(55,138,221,.12);border:1px solid rgba(55,138,221,.25);border-radius:6px;padding:3px 8px;font-size:10px;color:var(--accent);font-family:'Rajdhani',sans-serif;margin:2px">
+        ${p}<button onclick="cfgQuitarPN('${p}')" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:12px;padding:0;line-height:1">✕</button>
+      </span>`).join('')
+    : '<div style="font-size:10px;color:var(--text2);padding:4px 0">Sin PNs — agrega hasta 10</div>';
+}
+
+function cfgMonPreview(){
+  const lim = parseInt(document.getElementById('cfgMonLimite').value)||12000;
+  const alerta = Math.round(lim*0.67);
+  document.getElementById('cfgPrevCrit').textContent = '< '+alerta.toLocaleString()+' pzas';
+  document.getElementById('cfgPrevAlerta').textContent = alerta.toLocaleString()+' – '+lim.toLocaleString();
+  document.getElementById('cfgPrevOk').textContent = '≥ '+lim.toLocaleString()+' pzas';
+}
+
+function guardarConfigMonitor(){
+  const lim = parseInt(document.getElementById('cfgMonLimite').value)||12000;
+  if(lim<1){toast('Límite inválido','err');return;}
+  if(_cfgModo==='manual'&&_cfgPns.length===0){toast('Agrega al menos 1 PN','err');return;}
+  STOCK_MIN_LIMITE = lim;
+  STOCK_MIN_MODO = _cfgModo;
+  STOCK_MIN_PNS_MANUAL = [..._cfgPns];
+  if(typeof db!=='undefined'){
+    db.collection('ims_config').doc('planta4').set({
+      stockMinLimite: lim,
+      stockMinModo: _cfgModo,
+      stockMinPns: _cfgPns
+    },{merge:true})
+    .then(()=>{
+      const msg=document.getElementById('cfgMonMsg');
+      msg.style.display='block';
+      msg.textContent='✓ Configuración guardada correctamente';
+      updateDash();
+      setTimeout(cerrarConfigMonitor,1800);
+    })
+    .catch(()=>toast('Error al guardar','err'));
+  } else {
+    updateDash();
+    toast('Configuración actualizada','ok');
+    setTimeout(cerrarConfigMonitor,1500);
+  }
+}
 </script>
 
 </body>
