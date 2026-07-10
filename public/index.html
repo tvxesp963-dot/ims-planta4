@@ -1575,7 +1575,7 @@ function exportExcel() {
   });
   if (!filtrados.length) { toast('No hay partes para exportar con el filtro actual', 'warn'); return; }
 
-  const rows = [['PN','Descripción','Familia','Inv. Inicial','Entradas','Salidas','Stock','Precio USD','Valor USD','Estatus','Ubicación']];
+  const rows = [['PN','Descripción','Familia','Inv. Inicial','Entradas','Salidas','Stock','Loc1','Loc2','Loc3','Precio USD','Valor USD','Estatus','Ubicación']];
   filtrados.forEach(function(i){
     rows.push([
       i.pn||'',
@@ -1585,6 +1585,9 @@ function exportExcel() {
       Number(i.entradas)||0,
       Number(i.salidas)||0,
       Number(i.actual)||0,
+      i.loc1!==undefined?i.loc1:'',
+      i.loc2!==undefined?i.loc2:'',
+      i.loc3!==undefined?i.loc3:'',
       Number(i.precio)||0,
       +(((Number(i.actual)||0)*(Number(i.precio)||0)).toFixed(2)),
       i.estatus||'',
@@ -1595,7 +1598,7 @@ function exportExcel() {
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet(rows);
   // Ancho de columnas
-  ws['!cols'] = [{wch:14},{wch:32},{wch:10},{wch:11},{wch:10},{wch:9},{wch:9},{wch:11},{wch:12},{wch:11},{wch:14}];
+  ws['!cols'] = [{wch:14},{wch:32},{wch:10},{wch:11},{wch:10},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:11},{wch:12},{wch:11},{wch:14}];
   XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
 
   const filtroNombre = invFam==='TODOS'?'Todos':invFam;
