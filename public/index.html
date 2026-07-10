@@ -1076,6 +1076,10 @@ function goBack() {
 window.goBack = goBack;
 
 // ── DASHBOARD ──
+let STOCK_MIN_LIMITE = 12000;
+let STOCK_MIN_MODO = 'auto';
+let STOCK_MIN_PNS_MANUAL = [];
+
 function updateDash() {
   const tot = items.reduce((s,i)=>s+(parseFloat(i.actual)||0),0);
   const val = items.reduce((s,i)=>s+((parseFloat(i.actual)||0)*(parseFloat(i.precio)||0)),0);
@@ -1098,9 +1102,6 @@ function updateDash() {
   renderMonitorStock();
 }
 
-let STOCK_MIN_LIMITE = 12000;
-let STOCK_MIN_MODO = 'auto'; // 'auto' o 'manual'
-let STOCK_MIN_PNS_MANUAL = [];
 // Cargar configuración guardada desde Firestore
 if(typeof db!=='undefined'){
   db.collection('ims_config').doc('planta4').get().then(doc=>{
