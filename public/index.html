@@ -2528,11 +2528,15 @@ window.ilAplicar=ilAplicar;
 
     <div id="cfgPanelManual" style="display:none;margin-bottom:.8rem">
       <div style="font-size:10px;color:var(--text2);margin-bottom:6px">Agregar Part Number (máx. 10)</div>
-      <div style="display:flex;gap:6px;margin-bottom:8px">
-        <input id="cfgPnInput" type="text" placeholder="ej. GH68-55072A"
-          style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:9px 10px;color:var(--text);font-size:12px;font-family:'Rajdhani',sans-serif;text-transform:uppercase"
-          oninput="this.value=this.value.toUpperCase()"
-          onkeydown="if(event.key==='Enter')cfgAgregarPN()">
+      <div style="display:flex;gap:6px;margin-bottom:4px;position:relative">
+        <div style="flex:1;position:relative">
+          <input id="cfgPnInput" type="text" placeholder="Buscar Part Number..."
+            style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:9px 10px;color:var(--text);font-size:12px;font-family:'Rajdhani',sans-serif;text-transform:uppercase"
+            oninput="this.value=this.value.toUpperCase();cfgBuscarPN(this.value)"
+            onkeydown="if(event.key==='Enter'){cfgAgregarPN();event.preventDefault();}if(event.key==='Escape')cfgCerrarSug();"
+            autocomplete="off">
+          <div id="cfgSugWrap" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;margin-top:3px;max-height:180px;overflow-y:auto;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.4)"></div>
+        </div>
         <button onclick="cfgAgregarPN()" style="background:rgba(29,158,117,.2);border:1px solid rgba(29,158,117,.4);border-radius:8px;padding:9px 12px;color:var(--green);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">+ Agregar</button>
       </div>
       <div id="cfgTagsWrap" style="min-height:32px;margin-bottom:6px"></div>
@@ -2597,6 +2601,41 @@ function cfgSetModo(m){
   document.getElementById('cfgPanelManual').style.display = m==='manual'?'block':'none';
 }
 
+function cfgBuscarPN(q){
+  const wrap = document.getElementById('cfgSugWrap');
+  if(!q||q.length<2){wrap.style.display='none';return;}
+  const res = items.filter(i=>{
+    const pn=(i.pn||'').toUpperCase();
+    const desc=(i.desc||'').toUpperCase();
+    return pn.includes(q)||desc.includes(q);
+  }).slice(0,8);
+  if(!res.length){wrap.style.display='none';return;}
+  wrap.innerHTML = res.map(i=>`
+    <div onclick="cfgSeleccionarPN('${i.pn}')"
+      style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"
+      onmouseover="this.style.background='rgba(55,138,221,.1)'"
+      onmouseout="this.style.background='transparent'">
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--accent);font-family:'Rajdhani',sans-serif">${i.pn}</div>
+        <div style="font-size:9px;color:var(--text2)">${i.desc||''}</div>
+      </div>
+      <div style="font-size:11px;font-weight:600;color:${(parseFloat(i.actual)||0)>0?'var(--accent)':'var(--text2)'}">
+        ${(parseFloat(i.actual)||0).toLocaleString()}
+      </div>
+    </div>`).join('');
+  wrap.style.display='block';
+}
+
+function cfgSeleccionarPN(pn){
+  document.getElementById('cfgPnInput').value=pn;
+  cfgCerrarSug();
+  cfgAgregarPN();
+}
+
+function cfgCerrarSug(){
+  document.getElementById('cfgSugWrap').style.display='none';
+}
+
 function cfgAgregarPN(){
   const val = document.getElementById('cfgPnInput').value.trim().toUpperCase();
   if(!val) return;
@@ -2604,6 +2643,7 @@ function cfgAgregarPN(){
   if(_cfgPns.length>=10){toast('Máximo 10 PNs','err');return;}
   _cfgPns.push(val);
   document.getElementById('cfgPnInput').value='';
+  cfgCerrarSug();
   cfgRenderTags();
 }
 
