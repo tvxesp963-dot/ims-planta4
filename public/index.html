@@ -1099,7 +1099,7 @@ function updateDash() {
     const l=document.getElementById('f'+k); if(l) l.textContent=fams[f].p.toLocaleString()+' · $'+fams[f].v.toFixed(0);
   });
   renderDashMovs();
-  renderMonitorStock();
+  if (typeof STOCK_MIN_LIMITE !== 'undefined') renderMonitorStock();
 }
 
 // Cargar configuración guardada desde Firestore
@@ -1118,6 +1118,7 @@ if(typeof db!=='undefined'){
 function renderMonitorStock() {
   const el = document.getElementById('monitorStockMin');
   if (!el) return;
+  if (typeof STOCK_MIN_LIMITE === 'undefined') return;
   const alerta = Math.round(STOCK_MIN_LIMITE*0.67);
   let lista;
   if(STOCK_MIN_MODO==='auto'){
