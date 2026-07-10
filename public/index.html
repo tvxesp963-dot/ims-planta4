@@ -3,7 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>IMS · Inventario Planta 4</title>
+<script>
+/* ===== CONTROL DE VERSION (evita que celulares/laptops se queden con version vieja en cache) =====
+   Cada vez que subas un index.html actualizado, cambia este numero (ej: 20260711).
+   El sistema detecta el cambio y recarga automaticamente la version nueva. */
+var APP_VERSION = "20260710a";
+(function(){
+  try{
+    var key = 'ims_p4_version';
+    var stored = localStorage.getItem(key);
+    if(stored !== APP_VERSION){
+      localStorage.setItem(key, APP_VERSION);
+      if(stored){
+        var url = new URL(location.href);
+        url.searchParams.set('_v', APP_VERSION);
+        location.replace(url.toString());
+      }
+    }
+  }catch(e){}
+})();
+</script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
