@@ -1151,7 +1151,7 @@ function renderMonitorStock() {
     lista = STOCK_MIN_PNS_MANUAL.map(pn=>{
       const item = items.find(i=>(i.pn||'').toUpperCase()===pn.toUpperCase());
       return {pn, desc:item?item.desc:'—', stock:item?(parseFloat(item.actual)||0):0};
-    });
+    }).sort((a,b)=>a.pn.localeCompare(b.pn));
   }
   function color(s){ return s>=STOCK_MIN_LIMITE?'var(--green)':s>=alerta?'var(--amber)':'#ff6b6b'; }
   function badgeCls(s){ return s>=STOCK_MIN_LIMITE?'mon-ok':s>=alerta?'mon-warn':'mon-crit'; }
