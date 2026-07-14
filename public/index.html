@@ -1686,9 +1686,12 @@ function renderMonitorStock() {
     lista = [...items].sort((a,b)=>(parseFloat(a.actual)||0)-(parseFloat(b.actual)||0)).slice(0,10)
       .map(i=>({pn:i.pn, desc:i.desc, stock:parseFloat(i.actual)||0}));
   } else {
-    lista = STOCK_MIN_PNS_MANUAL.map(pn=>{
-      const item = items.find(i=>(i.pn||'').toUpperCase()===pn.toUpperCase());
-      return {pn, desc:item?item.desc:'—', stock:item?(parseFloat(item.actual)||0):0};
+    lista = STOCK_MIN_PNS_MANUAL.map(p=>{
+      const o = (typeof p==='string')?{pn:p,desc:''}:p;
+      const item = o.desc
+        ? items.find(i=>(i.pn||'').toUpperCase()===o.pn.toUpperCase() && (i.desc||'').toUpperCase()===o.desc.toUpperCase())
+        : items.find(i=>(i.pn||'').toUpperCase()===o.pn.toUpperCase());
+      return {pn:o.pn, desc:item?item.desc:(o.desc||'—'), stock:item?(parseFloat(item.actual)||0):0};
     }).sort((a,b)=>a.pn.localeCompare(b.pn));
   }
   function color(s){ return s>=STOCK_MIN_LIMITE?'var(--green)':s>=alerta?'var(--amber)':'#ff6b6b'; }
@@ -3164,6 +3167,7 @@ function cfgSetModo(m){
   document.getElementById('cfgPanelManual').style.display = m==='manual'?'block':'none';
 }
 
+let _cfgSugRes = [];
 function cfgBuscarPN(q){
   const wrap = document.getElementById('cfgSugWrap');
   if(!q||q.length<2){wrap.style.display='none';return;}
@@ -3172,9 +3176,10 @@ function cfgBuscarPN(q){
     const desc=(i.desc||'').toUpperCase();
     return pn.includes(q)||desc.includes(q);
   }).slice(0,8);
+  _cfgSugRes = res;
   if(!res.length){wrap.style.display='none';return;}
-  wrap.innerHTML = res.map(i=>`
-    <div onclick="cfgSeleccionarPN('${i.pn}')"
+  wrap.innerHTML = res.map((i,idx)=>`
+    <div onclick="cfgSeleccionarPN(${idx})"
       style="padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"
       onmouseover="this.style.background='rgba(55,138,221,.1)'"
       onmouseout="this.style.background='transparent'">
@@ -3189,38 +3194,49 @@ function cfgBuscarPN(q){
   wrap.style.display='block';
 }
 
-function cfgSeleccionarPN(pn){
-  document.getElementById('cfgPnInput').value=pn;
+function cfgSeleccionarPN(idx){
+  const it = _cfgSugRes[idx];
+  if(!it) return;
+  document.getElementById('cfgPnInput').value=it.pn;
   cfgCerrarSug();
-  cfgAgregarPN();
+  cfgAgregarPN(it.desc||'');
 }
 
 function cfgCerrarSug(){
   document.getElementById('cfgSugWrap').style.display='none';
 }
 
-function cfgAgregarPN(){
+function cfgAgregarPN(descArg){
   const val = document.getElementById('cfgPnInput').value.trim().toUpperCase();
   if(!val) return;
-  if(_cfgPns.includes(val)){toast('PN ya existe','err');return;}
+  const desc = (descArg||'').trim();
+  const dupe = _cfgPns.some(p=>{
+    const o = (typeof p==='string')?{pn:p,desc:''}:p;
+    return o.pn===val && (o.desc||'').toUpperCase()===desc.toUpperCase();
+  });
+  if(dupe){toast('Esa combinación PN + descripción ya existe','err');return;}
   if(_cfgPns.length>=10){toast('Máximo 10 PNs','err');return;}
-  _cfgPns.push(val);
+  _cfgPns.push({pn:val, desc:desc});
   document.getElementById('cfgPnInput').value='';
   cfgCerrarSug();
   cfgRenderTags();
 }
 
-function cfgQuitarPN(pn){
-  _cfgPns = _cfgPns.filter(p=>p!==pn);
+function cfgQuitarPN(idx){
+  _cfgPns.splice(idx,1);
   cfgRenderTags();
 }
 
 function cfgRenderTags(){
   const wrap = document.getElementById('cfgTagsWrap');
   wrap.innerHTML = _cfgPns.length
-    ? _cfgPns.map(p=>`<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(55,138,221,.12);border:1px solid rgba(55,138,221,.25);border-radius:6px;padding:3px 8px;font-size:10px;color:var(--accent);font-family:'Rajdhani',sans-serif;margin:2px">
-        ${p}<button onclick="cfgQuitarPN('${p}')" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:12px;padding:0;line-height:1">✕</button>
-      </span>`).join('')
+    ? _cfgPns.map((p,idx)=>{
+        const o = (typeof p==='string')?{pn:p,desc:''}:p;
+        const label = o.desc ? (o.pn+' · '+o.desc) : o.pn;
+        return `<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(55,138,221,.12);border:1px solid rgba(55,138,221,.25);border-radius:6px;padding:3px 8px;font-size:10px;color:var(--accent);font-family:'Rajdhani',sans-serif;margin:2px">
+        ${label}<button onclick="cfgQuitarPN(${idx})" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:12px;padding:0;line-height:1">✕</button>
+      </span>`;
+      }).join('')
     : '<div style="font-size:10px;color:var(--text2);padding:4px 0">Sin PNs — agrega hasta 10</div>';
 }
 
