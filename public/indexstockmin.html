@@ -1692,7 +1692,7 @@ function renderMonitorStock() {
         ? items.find(i=>(i.pn||'').toUpperCase()===o.pn.toUpperCase() && (i.desc||'').toUpperCase()===o.desc.toUpperCase())
         : items.find(i=>(i.pn||'').toUpperCase()===o.pn.toUpperCase());
       return {pn:o.pn, desc:item?item.desc:(o.desc||'—'), stock:item?(parseFloat(item.actual)||0):0};
-    }).sort((a,b)=>a.stock-b.stock);
+    }).sort((a,b)=>a.pn.localeCompare(b.pn));
   }
   function color(s){ return s>=STOCK_MIN_LIMITE?'var(--green)':s>=alerta?'var(--amber)':'#ff6b6b'; }
   function badgeCls(s){ return s>=STOCK_MIN_LIMITE?'mon-ok':s>=alerta?'mon-warn':'mon-crit'; }
