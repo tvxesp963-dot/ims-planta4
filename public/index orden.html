@@ -1640,7 +1640,6 @@ window.goBack = goBack;
 var STOCK_MIN_LIMITE = 12000; // v2
 var STOCK_MIN_MODO = 'auto';
 var STOCK_MIN_PNS_MANUAL = [];
-var _monitorListaActual = [];
 
 function updateDash() {
   const tot = items.reduce((s,i)=>s+(parseFloat(i.actual)||0),0);
@@ -1701,14 +1700,10 @@ function renderMonitorStock() {
   function pct(s){ return Math.min(100,Math.round((s/STOCK_MIN_LIMITE)*100)); }
   const critCount = lista.filter(i=>i.stock<STOCK_MIN_LIMITE).length;
   const modoLabel = STOCK_MIN_MODO==='auto'?'🤖 Automático':'📌 Manual';
-  _monitorListaActual = lista;
   el.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
       '<div style="font-size:9px;color:var(--text2)">Mín: <b style="color:var(--text)">'+STOCK_MIN_LIMITE.toLocaleString()+' pzas</b> · <span style="color:var(--text2)">'+modoLabel+'</span></div>'+
-      '<div style="display:flex;align-items:center;gap:8px">'+
       (critCount>0?'<div style="font-size:9px;color:#ff6b6b;font-weight:600">⚠ '+critCount+' bajo mínimo</div>':'<div style="font-size:9px;color:var(--green)">✓ Todo OK</div>')+
-      '<button onclick="exportMonitorStock()" style="font-size:9px;background:rgba(55,138,221,.12);border:1px solid rgba(55,138,221,.3);color:var(--accent);border-radius:5px;padding:2px 7px;cursor:pointer;white-space:nowrap">⬇ Excel</button>'+
-      '</div>'+
     '</div>'+
     '<div class="mon-grid mon-hdr"><div>Artículo</div><div style="text-align:right">Stock</div><div>Nivel</div><div style="text-align:center">Estado</div></div>'+
     lista.map((i,idx)=>{
@@ -1725,24 +1720,6 @@ function renderMonitorStock() {
       '</div>';
     }).join('')+
     (lista.length===0?'<div style="text-align:center;font-size:11px;color:var(--text2);padding:10px">Sin PNs configurados</div>':'');
-}
-
-function exportMonitorStock() {
-  if (typeof XLSX === 'undefined') { toast('❌ Librería Excel no cargada', 'err'); return; }
-  if (!_monitorListaActual.length) { toast('No hay datos para exportar', 'err'); return; }
-  const alerta = Math.round(STOCK_MIN_LIMITE*0.67);
-  function estado(s){ return s>=STOCK_MIN_LIMITE?'OK':s>=alerta?'Alerta':'Crítico'; }
-  const rows = [['PN','Descripción','Stock Actual','Estado']];
-  _monitorListaActual.forEach(i=>{
-    rows.push([i.pn, i.desc, i.stock, estado(i.stock)]);
-  });
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{wch:16},{wch:35},{wch:14},{wch:10}];
-  XLSX.utils.book_append_sheet(wb, ws, 'Stock Minimo');
-  const fecha = new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb, 'IMS_P4_StockMinimo_'+fecha+'.xlsx');
-  toast('✅ Excel exportado');
 }
 
 function renderDashMovs() {
