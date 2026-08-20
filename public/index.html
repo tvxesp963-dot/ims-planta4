@@ -907,7 +907,7 @@ window.loadFromFirestore = loadFromFirestore;
 
 function startSync() {
   if (!db) return;
-  unsub = db.collection('planta4_movimientos').orderBy('fecha','desc').limit(50)
+  unsub = db.collection('planta4_movimientos').orderBy('fecha','desc').limit(500)
     .onSnapshot(snap => {
       const fm = [];
       snap.forEach(d => fm.push(d.data()));
