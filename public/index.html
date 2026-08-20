@@ -2137,17 +2137,26 @@ function setHistF(f,el) { histFam=f; document.querySelectorAll('#pgHist .ft').fo
 function renderHist() {
   const q = (document.getElementById('histS')||{value:''}).value.toLowerCase();
   let f = [...movs];
-  if (histFam!=='TODOS') f=f.filter(m=>m.tipo===histFam);
+  if (histFam!=='TODOS') f=f.filter(m=>{
+    const tipoNorm = m.tipo==='OUT' ? 'S' : m.tipo==='IN' ? 'E' : m.tipo;
+    return tipoNorm===histFam;
+  });
   if (q) f=f.filter(m=>m.pn&&m.pn.toLowerCase().includes(q));
   const el = document.getElementById('histList');
   el.innerHTML = f.length ? f.slice(0,60).map(movHTML).join('') : '<div class="empty">📋<br>Sin movimientos</div>';
 }
 function movHTML(m) {
+  // Normaliza campos: el MES (Cierre de Jornada) usa nombres distintos a los nativos de IMS
+  const tipoNorm = m.tipo==='OUT' ? 'S' : m.tipo==='IN' ? 'E' : m.tipo;
+  const qty = (m.qty!==undefined && m.qty!==null) ? m.qty : (m.cantidad||0);
+  const loc = m.loc || m.ubicacion || '–';
+  const usr = m.user || m.usuario || '';
+  const ref = m.ref || m.referencia || '';
   const icons={E:'⬇️',S:'⬆️',T:'🔀',INI:'🏁'};
   const cols={E:'mb-E',S:'mb-S',T:'mb-T',INI:'mb-T'};
   const qc={E:'color:var(--green)',S:'color:var(--red)',T:'color:var(--accent)'};
   const signs={E:'+',S:'-',T:'→'};
-  return '<div class="mc"><div class="mb '+(cols[m.tipo]||'mb-T')+'">'+(icons[m.tipo]||'🔄')+'</div><div style="flex:1;min-width:0"><div class="mc-t">'+(m.pn||'–')+'</div><div class="mc-d">'+(m.desc||'')+' · '+(m.familia||'')+' · '+(m.user||'')+'</div><div class="mc-l">📍 '+(m.loc||'–')+' · '+fmtDate(m.fecha)+(m.ref?' · '+m.ref:'')+'</div></div><div class="mc-q" style="'+(qc[m.tipo]||'')+'">'+(signs[m.tipo]||'')+(m.qty||0)+'</div></div>';
+  return '<div class="mc"><div class="mb '+(cols[tipoNorm]||'mb-T')+'">'+(icons[tipoNorm]||'🔄')+'</div><div style="flex:1;min-width:0"><div class="mc-t">'+(m.pn||'–')+'</div><div class="mc-d">'+(m.desc||'')+' · '+(m.familia||'')+' · '+usr+'</div><div class="mc-l">📍 '+loc+' · '+fmtDate(m.fecha)+(ref?' · '+ref:'')+'</div></div><div class="mc-q" style="'+(qc[tipoNorm]||'')+'">'+(signs[tipoNorm]||'')+qty+'</div></div>';
 }
 
 // ── ADMIN ──
