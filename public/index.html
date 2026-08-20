@@ -2141,7 +2141,13 @@ function renderHist() {
     const tipoNorm = m.tipo==='OUT' ? 'S' : m.tipo==='IN' ? 'E' : m.tipo;
     return tipoNorm===histFam;
   });
-  if (q) f=f.filter(m=>(m.pn&&m.pn.toLowerCase().includes(q))||(m.desc&&m.desc.toLowerCase().includes(q)));
+  if (q) {
+    const terms = q.split(' ').filter(Boolean);
+    f = f.filter(m => {
+      const texto = ((m.pn||'')+' '+(m.desc||'')).toLowerCase();
+      return terms.every(t => texto.includes(t));
+    });
+  }
   const el = document.getElementById('histList');
   el.innerHTML = f.length ? f.slice(0,60).map(movHTML).join('') : '<div class="empty">📋<br>Sin movimientos</div>';
 }
