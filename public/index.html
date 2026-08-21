@@ -11,7 +11,7 @@
 /* ===== CONTROL DE VERSION (evita que celulares/laptops se queden con version vieja en cache) =====
    Cada vez que subas un index.html actualizado, cambia este numero (ej: 20260711).
    El sistema detecta el cambio y recarga automaticamente la version nueva. */
-var APP_VERSION = "20260713a";
+var APP_VERSION = "20260820a";
 (function(){
   try{
     var key = 'ims_p4_version';
@@ -712,6 +712,8 @@ let user = JSON.parse(localStorage.getItem('ims4_user')||'null');
 let _blockSnapshot = false;
 let selIdx = null, movTipo = 'E', invFam = 'TODOS', histFam = 'TODOS', selRole = 'admin';
 let db = null, auth = null, unsub = null;
+const MASTER_EMAIL = 'tvxesp963@gmail.com'; // único usuario que puede editar PN/Desc/Familia/Inventario/Precio directamente
+function isMaster() { return !!(user && (user.email||'').toLowerCase() === MASTER_EMAIL); }
 
 function saveLocal() {
   localStorage.setItem('ims4_items', JSON.stringify(items));
@@ -731,6 +733,31 @@ function openEdit(idx) {
   document.getElementById('editPrecio').value = Number(i.precio)||0;
   document.getElementById('editEstatus').value = i.estatus || 'DONE';
   document.getElementById('editUbic').value = i.ubicacion || 'Almacén';
+
+  // Solo el usuario master puede editar PN/Descripción/Familia/Inventario/Precio directamente
+  var camposMaster = ['editPN','editFam','editDesc','editInicial','editEntradas','editSalidas','editPrecio'];
+  var esMaster = isMaster();
+  camposMaster.forEach(function(id){
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.readOnly = !esMaster;
+    el.disabled = !esMaster;
+    el.style.opacity = esMaster ? '1' : '.6';
+    el.style.cursor = esMaster ? 'text' : 'not-allowed';
+  });
+  var avisoCat = document.getElementById('t-avisoSoloLecturaCat');
+  var avisoInv = document.getElementById('t-avisoSoloLecturaInv');
+  if (avisoCat) avisoCat.style.display = esMaster ? 'none' : '';
+  if (avisoInv) avisoInv.style.display = esMaster ? 'none' : '';
+  if (esMaster) {
+    var editEnt = document.getElementById('editEntradas');
+    var editSal = document.getElementById('editSalidas');
+    var editIni = document.getElementById('editInicial');
+    if (editEnt) editEnt.oninput = _editRecalcStock;
+    if (editSal) editSal.oninput = _editRecalcStock;
+    if (editIni) editIni.oninput = _editRecalcStock;
+  }
+
   _editRecalcStock();
   document.getElementById('modalEdit').style.display = 'flex';
 }
@@ -756,18 +783,33 @@ async function saveEdit() {
   const idx = window._editIdx;
   if (idx === undefined || idx === null) return;
   const oldItemRef = items[idx];
-  // PN, descripción, familia, inventario y precio son de solo lectura aquí: siempre se usa el
-  // valor original, sin importar lo que tenga el campo (protección contra manipulación del DOM).
-  // Para cambiar PN/Familia/Descripción usar el BOM Simulator.
-  // Para cambiar inventario (entradas/salidas) usar el módulo de Movimientos.
-  // Para cambiar precio usar 💲 Importar Precios en Admin.
-  const newPN = (oldItemRef.pn || '').trim().toUpperCase();
-  const newDesc = (oldItemRef.desc || '').trim().toUpperCase();
-  const newFam = oldItemRef.familia || 'Otro';
-  const newIni = Math.round(parseFloat(oldItemRef.inicial)||0);
-  const newEnt = Math.round(parseFloat(oldItemRef.entradas)||0);
-  const newSal = Math.round(parseFloat(oldItemRef.salidas)||0);
-  const newPrecio = parseFloat(oldItemRef.precio)||0;
+  const esMaster = isMaster();
+  // Para todos los demás usuarios, PN, descripción, familia, inventario y precio son de solo
+  // lectura aquí: siempre se usa el valor original, sin importar lo que tenga el campo
+  // (protección contra manipulación del DOM).
+  // Solo el usuario master (definido en MASTER_EMAIL) puede editar estos campos directamente
+  // desde este mismo modal, igual que antes existía.
+  const newPN = esMaster
+    ? (document.getElementById('editPN').value || '').trim().toUpperCase()
+    : (oldItemRef.pn || '').trim().toUpperCase();
+  const newDesc = esMaster
+    ? (document.getElementById('editDesc').value || '').trim().toUpperCase()
+    : (oldItemRef.desc || '').trim().toUpperCase();
+  const newFam = esMaster
+    ? (document.getElementById('editFam').value || 'Otro')
+    : (oldItemRef.familia || 'Otro');
+  const newIni = esMaster
+    ? Math.round(parseFloat(document.getElementById('editInicial').value)||0)
+    : Math.round(parseFloat(oldItemRef.inicial)||0);
+  const newEnt = esMaster
+    ? Math.round(parseFloat(document.getElementById('editEntradas').value)||0)
+    : Math.round(parseFloat(oldItemRef.entradas)||0);
+  const newSal = esMaster
+    ? Math.round(parseFloat(document.getElementById('editSalidas').value)||0)
+    : Math.round(parseFloat(oldItemRef.salidas)||0);
+  const newPrecio = esMaster
+    ? parseFloat(document.getElementById('editPrecio').value)||0
+    : parseFloat(oldItemRef.precio)||0;
   const newEstatus = document.getElementById('editEstatus').value;
   const newUbic = document.getElementById('editUbic').value.trim() || 'Almacén';
   if (!newPN) { toast('Part Number requerido','err'); return; }
@@ -778,6 +820,15 @@ async function saveEdit() {
   var cambios = [];
   if ((oldItem.estatus||'') !== newEstatus) cambios.push('estatus: '+(oldItem.estatus||'')+'→'+newEstatus);
   if ((oldItem.ubicacion||'Almacén') !== newUbic) cambios.push('ubicación: '+(oldItem.ubicacion||'Almacén')+'→'+newUbic);
+  if (esMaster) {
+    if ((oldItem.pn||'') !== newPN) cambios.push('PN: '+(oldItem.pn||'')+'→'+newPN);
+    if ((oldItem.desc||'') !== newDesc) cambios.push('desc: '+(oldItem.desc||'')+'→'+newDesc);
+    if ((oldItem.familia||'') !== newFam) cambios.push('familia: '+(oldItem.familia||'')+'→'+newFam);
+    if (Math.round(parseFloat(oldItem.inicial)||0) !== newIni) cambios.push('inicial: '+(oldItem.inicial||0)+'→'+newIni);
+    if (Math.round(parseFloat(oldItem.entradas)||0) !== newEnt) cambios.push('entradas: '+(oldItem.entradas||0)+'→'+newEnt);
+    if (Math.round(parseFloat(oldItem.salidas)||0) !== newSal) cambios.push('salidas: '+(oldItem.salidas||0)+'→'+newSal);
+    if ((parseFloat(oldItem.precio)||0) !== newPrecio) cambios.push('precio: '+(oldItem.precio||0)+'→'+newPrecio);
+  }
 
   var nuevoHistorial = (oldItem.historial||[]).slice();
   if (cambios.length) {
