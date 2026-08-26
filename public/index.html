@@ -474,6 +474,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div class="ac" onclick="clearMovs()"><div class="ac-i">🗑️</div><div class="ac-l" id="t-acLimpiarMovs">Limpiar movs.</div><div class="ac-s" id="t-acSoloAdmin">Solo Admin</div></div>
       <div class="ac" onclick="migrateToFirestore()" style="border-color:#2ecc71"><div class="ac-i">☁️</div><div class="ac-l">Sync Firestore</div><div class="ac-s" id="t-acSyncSub">Subir todos los items</div></div>
       <div class="ac" onclick="cleanDuplicates()" style="border-color:#e74c3c"><div class="ac-i">🧹</div><div class="ac-l" id="t-acLimpiarDup">Limpiar duplicados</div><div class="ac-s" id="t-acLimpiarDupSub">Eliminar IDs viejos</div></div>
+      <div class="ac" onclick="abrirReporteFecha()" style="border-color:rgba(37,99,235,.4)"><div class="ac-i">📅</div><div class="ac-l">Reporte a fecha</div><div class="ac-s">Inventario histórico</div></div>
       <div class="ac" onclick="resetStock()"><div class="ac-i">🔄</div><div class="ac-l" id="t-acReset">Reset stock</div><div class="ac-s" id="t-acResetSub">Volver a inicial</div></div>
       <div class="ac" onclick="abrirCargaExcel()" style="border-color:rgba(0,230,118,.3)"><div class="ac-i">📥</div><div class="ac-l" id="t-acCargarExcel">Cargar Excel</div><div class="ac-s" id="t-acCargarExcelSub">Reemplazar inventario</div></div>
       <div class="ac" onclick="abrirImportPrecios()" style="border-color:rgba(255,179,0,.4)"><div class="ac-i">💲</div><div class="ac-l" id="t-acImportPrecios">Importar Precios</div><div class="ac-s" id="t-acImportPreciosSub">Desde Excel PN+Price</div></div>
@@ -644,6 +645,19 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div id="xSpinnerAnim" style="display:none"></div>
       <div id="xMsg" style="font-size:14px;color:var(--text)">Procesando...</div>
     </div>
+  </div>
+</div>
+
+<div id="modalReporteFecha" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:600;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)">
+  <div style="background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:1.5rem 1.2rem 2.5rem;border-top:1px solid var(--border2);max-height:90vh;overflow-y:auto">
+    <div style="width:36px;height:3px;border-radius:2px;background:var(--border2);margin:0 auto 1.2rem"></div>
+    <div style="font-family:'Rajdhani',sans-serif;font-size:17px;font-weight:700;margin-bottom:.2rem">📅 Reporte de Inventario a Fecha</div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:1rem">Reconstruye el stock de cada parte al final del día elegido, usando el historial guardado.</div>
+    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;display:block;margin-bottom:5px">Fecha de corte</label>
+    <input type="date" id="repFechaCorte" class="ref-in" style="margin:0 0 12px" value="2026-07-31">
+    <button class="btn-conf bc-E" onclick="generarReporteFecha()" id="repBtnGenerar">📊 Generar y descargar Excel</button>
+    <div id="repStatus" style="margin-top:10px;font-size:12px;display:none;padding:8px 10px;border-radius:8px"></div>
+    <button class="btn btn-secondary btn-sm" style="width:100%;margin-top:10px" onclick="document.getElementById('modalReporteFecha').style.display='none'">Cerrar</button>
   </div>
 </div>
 
@@ -3364,6 +3378,86 @@ function guardarConfigMonitor(){
     setTimeout(cerrarConfigMonitor,1500);
   }
 }
+
+// ── REPORTE DE INVENTARIO A FECHA ──
+function abrirReporteFecha(){
+  document.getElementById('repStatus').style.display='none';
+  document.getElementById('modalReporteFecha').style.display='flex';
+}
+window.abrirReporteFecha = abrirReporteFecha;
+
+function _repStockAlaFecha(historial, cutoffMs){
+  if (!Array.isArray(historial) || historial.length===0) return null;
+  const ord = historial.filter(h=>h&&h.fecha)
+    .map(h=>({...h,_t:new Date(h.fecha).getTime()}))
+    .filter(h=>!isNaN(h._t)&&h._t<=cutoffMs)
+    .sort((a,b)=>a._t-b._t);
+  if (ord.length===0) return null;
+  let stock=0;
+  for(const h of ord){
+    const qty = Number(h.qty)||0;
+    if (h.tipo==='INI') stock=qty;
+    else if (h.tipo==='E') stock+=qty;
+    else if (h.tipo==='EDIT') stock=qty;
+    else stock-=qty; // S, T
+  }
+  return stock;
+}
+
+async function generarReporteFecha(){
+  if (!db) { toast('❌ Sin conexión a Firebase','err'); return; }
+  const fechaInput = document.getElementById('repFechaCorte').value;
+  if (!fechaInput) { toast('Elige una fecha','err'); return; }
+  const cutoffMs = new Date(fechaInput+'T23:59:59.999').getTime();
+  const btn = document.getElementById('repBtnGenerar');
+  const st = document.getElementById('repStatus');
+  btn.disabled = true;
+  st.style.display='block'; st.style.background='rgba(55,138,221,.15)'; st.style.color='var(--accent)';
+  st.textContent = 'Leyendo Firestore...';
+  try {
+    const snap = await db.collection('planta4_inventario').get();
+    const filas = []; let totalValor=0;
+    const conteoPN = {};
+    snap.forEach(doc=>{
+      const it = doc.data();
+      const pn = (it.pn||'').trim();
+      if (pn){ if(!conteoPN[pn]) conteoPN[pn]=[]; conteoPN[pn].push(doc.id); }
+      const stock = _repStockAlaFecha(it.historial, cutoffMs);
+      if (stock===null) return;
+      const precio = Number(it.precio)||0;
+      const valor = stock*precio;
+      totalValor += valor;
+      filas.push({Familia:it.familia||'', 'Part Number':it.pn||'', 'Descripción':it.desc||'',
+        ['Inventario al '+fechaInput]:stock, 'Precio Unit ($)':precio, 'Valor ($)':Math.round(valor*100)/100});
+    });
+    if (filas.length===0){ st.style.background='#fee2e2'; st.style.color='#991b1b'; st.textContent='No hay partes con historial hasta esa fecha.'; btn.disabled=false; return; }
+    filas.sort((a,b)=>(a.Familia+a['Part Number']).localeCompare(b.Familia+b['Part Number']));
+
+    const porFam = {};
+    filas.forEach(f=>{ const fam=f.Familia||'SIN FAMILIA'; if(!porFam[fam]) porFam[fam]={l:0,u:0,v:0}; porFam[fam].l++; porFam[fam].u+=f['Inventario al '+fechaInput]; porFam[fam].v+=f['Valor ($)']; });
+    const resumen = Object.keys(porFam).sort().map(f=>({Familia:f,'# Líneas':porFam[f].l,'Inventario Total':porFam[f].u,'Valor Total ($)':Math.round(porFam[f].v*100)/100}));
+    resumen.push({Familia:'TOTAL','# Líneas':filas.length,'Inventario Total':filas.reduce((s,f)=>s+f['Inventario al '+fechaInput],0),'Valor Total ($)':Math.round(totalValor*100)/100});
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), 'Resumen');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'Detalle');
+
+    const negativos = filas.filter(f=>f['Inventario al '+fechaInput]<0);
+    if (negativos.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(negativos), 'Revisar (negativos)');
+
+    const dup = [];
+    Object.keys(conteoPN).forEach(pn=>{ if(conteoPN[pn].length>1) conteoPN[pn].forEach(id=>dup.push({'Part Number':pn,'Firestore Doc ID':id})); });
+    if (dup.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dup), 'PN Duplicados');
+
+    XLSX.writeFile(wb, 'Inventario_P4_'+fechaInput.replace(/-/g,'')+'.xlsx');
+    st.style.background='#dcfce7'; st.style.color='#166534';
+    st.textContent = '✅ Excel generado · '+filas.length+' partes';
+  } catch(err){
+    st.style.background='#fee2e2'; st.style.color='#991b1b';
+    st.textContent = '❌ Error: '+err.message;
+  } finally { btn.disabled=false; }
+}
+window.generarReporteFecha = generarReporteFecha;
 </script>
 
 </body>
