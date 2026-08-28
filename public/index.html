@@ -1026,8 +1026,13 @@ async function pushMov(mov) {
   if (!db) return;
   try {
     await db.collection('planta4_movimientos').add(mov);
-    const movItem = items.find(i=>i.pn===mov.pn && i.desc===mov.desc) || items.find(i=>i.pn===mov.pn);
-    if(movItem) await db.collection('planta4_inventario').doc(getDocId(mov.pn,movItem.desc)).set(movItem, {merge:true});
+    const movItem = items.find(i=>i.pn===mov.pn && i.desc===mov.desc);
+    if (!movItem) {
+      console.error('⚠️ pushMov: no hay match EXACTO de PN+Descripción, se omite para no tocar la parte equivocada:', mov.pn, '|', mov.desc);
+      toast('⚠️ No se encontró la parte exacta (' + mov.pn + ') — el movimiento se registró en historial pero el stock NO se actualizó. Revísalo manualmente.', 'err');
+      return;
+    }
+    await db.collection('planta4_inventario').doc(getDocId(mov.pn,movItem.desc)).set(movItem, {merge:true});
   } catch(e) {}
 }
 
