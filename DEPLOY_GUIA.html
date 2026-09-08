@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IMS · Guía de Deploy</title>
+<style>
+:root{--bg:#080c18;--bg2:#0e1325;--bg3:#141929;--accent:#4da6ff;--green:#00e676;--amber:#ffb300;--red:#ff4444;--text:#dde3f5;--text2:#7a88b8;--border:#1e2a4a;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);padding:1.5rem 1rem 4rem;max-width:660px;margin:0 auto}
+h1{font-size:24px;font-weight:700;color:var(--accent);margin-bottom:.3rem;letter-spacing:1px}
+.sub{font-size:13px;color:var(--text2);margin-bottom:2rem}
+.step{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1rem 1.2rem;margin-bottom:.8rem}
+.step-num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--accent);color:#000;font-weight:700;font-size:13px;margin-right:8px;flex-shrink:0;vertical-align:middle}
+.step-title{font-size:15px;font-weight:600;display:inline;vertical-align:middle}
+.step-body{font-size:12px;color:var(--text2);line-height:1.8;margin-top:.7rem}
+.code{background:#020408;border:1px solid #162030;border-radius:8px;padding:.6rem 1rem;font-family:monospace;font-size:12px;color:#7ec8ff;margin:.5rem 0;overflow-x:auto;line-height:1.8;white-space:pre}
+.tip{background:rgba(77,166,255,.06);border:1px solid rgba(77,166,255,.2);border-radius:8px;padding:.6rem .9rem;font-size:11px;color:var(--text2);margin:.5rem 0;line-height:1.6}
+.result{background:rgba(0,230,118,.06);border:1px solid rgba(0,230,118,.25);border-radius:8px;padding:.8rem 1rem;font-size:12px;color:var(--green);margin-top:.5rem;line-height:1.7}
+.warn{background:rgba(255,179,0,.06);border:1px solid rgba(255,179,0,.25);border-radius:8px;padding:.7rem .9rem;font-size:11px;color:var(--amber);margin:.5rem 0}
+strong{color:var(--text)}
+a{color:var(--accent)}
+.divider{height:1px;background:var(--border);margin:1.5rem 0}
+.url-box{background:var(--bg3);border:1px solid var(--accent);border-radius:10px;padding:.8rem 1rem;font-family:monospace;font-size:14px;color:var(--accent);text-align:center;margin:.5rem 0;font-weight:600}
+</style>
+</head>
+<body>
+<h1>🚀 Deploy IMS a Firebase Hosting</h1>
+<div class="sub">Publica el IMS como web app con URL propia — igual que tu MES · mes-production-esp</div>
+
+<div class="step">
+  <span class="step-num">1</span><span class="step-title">Crear el sitio IMS en Firebase Hosting</span>
+  <div class="step-body">
+    Tu proyecto ya tiene un sitio (<strong>mes-production-esp</strong>). Necesitas crear uno nuevo para el IMS:<br><br>
+    1. Ve a <a href="https://console.firebase.google.com/project/mes-production-esp/hosting" target="_blank">Firebase Console → Hosting</a><br>
+    2. Clic en <strong>"Agregar otro sitio"</strong><br>
+    3. ID del sitio: <strong>ims-planta4</strong><br>
+    4. Clic en <strong>"Agregar sitio"</strong><br><br>
+    Tu URL quedará:
+    <div class="url-box">https://ims-planta4.web.app</div>
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-num">2</span><span class="step-title">Copiar los archivos del deploy en tu carpeta mes-production</span>
+  <div class="step-body">
+    Descarga la carpeta <strong>IMS-Deploy</strong> que te generé y cópiala dentro de tu carpeta <strong>mes-production</strong>.<br><br>
+    Debe quedar así:
+    <div class="code">📁 mes-production/
+   ├── (archivos de tu MES)
+   ├── firebase.json  ← el de tu MES (NO tocar)
+   └── 📁 IMS-Deploy/
+          ├── firebase.json
+          ├── .firebaserc
+          └── 📁 public/
+                 ├── index.html
+                 └── manifest.json</div>
+    <div class="tip">⚠️ La carpeta IMS-Deploy tiene su propio <strong>firebase.json</strong> — es diferente al de tu MES. No reemplaces el de tu MES.</div>
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-num">3</span><span class="step-title">Abrir terminal en la carpeta IMS-Deploy</span>
+  <div class="step-body">
+    1. En VS Code: abre la carpeta <strong>IMS-Deploy</strong><br>
+    2. Abre la terminal integrada: <strong>Ctrl + `</strong> (acento grave)<br>
+    3. Verifica que estás en la carpeta correcta:
+    <div class="code">pwd</div>
+    Debe mostrar algo como: <code style="color:var(--green)">...mes-production/IMS-Deploy</code>
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-num">4</span><span class="step-title">Iniciar sesión en Firebase CLI (si no lo has hecho)</span>
+  <div class="step-body">
+    <div class="code">firebase login</div>
+    Si ya estás logueado (lo usas para el MES), salta este paso.
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-num">5</span><span class="step-title">Hacer el deploy</span>
+  <div class="step-body">
+    Ejecuta estos 2 comandos desde la carpeta IMS-Deploy:
+    <div class="code">firebase use mes-production-esp</div>
+    <div class="code">firebase deploy --only hosting:ims</div>
+    Verás algo así:
+    <div class="code" style="color:#9cdcfe">=== Deploying to 'mes-production-esp'...
+i  deploying hosting
+i  hosting[ims-planta4]: beginning deploy...
+✔  hosting[ims-planta4]: file upload complete
+✔  hosting[ims-planta4]: version finalized
+✔  Deploy complete!
+
+Hosting URL: https://ims-planta4.web.app</div>
+    <div class="result">
+      ✅ ¡Listo! Tu IMS estará en línea en:<br>
+      <strong>https://ims-planta4.web.app</strong><br><br>
+      Cualquier persona con el link e y su correo en Firebase puede acceder desde cualquier celular sin instalar nada.
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<div class="step">
+  <span class="step-num">6</span><span class="step-title">Instalar como app en el celular (opcional pero recomendado)</span>
+  <div class="step-body">
+    Una vez publicado, los operadores pueden instalarlo como app:<br><br>
+    <strong>Android (Chrome):</strong><br>
+    1. Abre <strong>https://ims-planta4.web.app</strong> en Chrome<br>
+    2. Menú ⋮ → <strong>"Agregar a pantalla de inicio"</strong><br>
+    3. Aparece con ícono 📦 como app nativa<br><br>
+    <strong>iPhone (Safari):</strong><br>
+    1. Abre en Safari<br>
+    2. Botón compartir □↑ → <strong>"Agregar a pantalla de inicio"</strong>
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-num">7</span><span class="step-title">Actualizar el IMS en el futuro</span>
+  <div class="step-body">
+    Cuando necesites actualizar el sistema (nuevas funciones, correcciones), solo reemplaza el <strong>index.html</strong> en la carpeta <strong>public</strong> y vuelve a hacer deploy:
+    <div class="code">firebase deploy --only hosting:ims</div>
+    Todos los usuarios ven la versión nueva automáticamente en segundos.
+  </div>
+</div>
+
+<div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:1.2rem;margin-top:1rem;text-align:center">
+  <div style="font-size:15px;color:var(--accent);font-weight:700;margin-bottom:.4rem">¿Algo no funciona?</div>
+  <div style="font-size:12px;color:var(--text2);line-height:1.7">
+    Copia el error exacto de la terminal y pégalo en el chat.<br>
+    Los errores más comunes son permisos de Firebase o ID de sitio incorrecto — se resuelven en 1 minuto.
+  </div>
+</div>
+</body>
+</html>

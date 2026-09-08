@@ -1,0 +1,21 @@
+{
+  "hosting": {
+    "target": "ims",
+    "public": "public",
+    "ignore": [
+      "firebase.json",
+      ".firebaserc",
+      "*.log",
+      "*.cache",
+      "DEPLOY_GUIA*",
+      "test*",
+      "copy*"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

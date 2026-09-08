@@ -11,7 +11,7 @@
 /* ===== CONTROL DE VERSION (evita que celulares/laptops se queden con version vieja en cache) =====
    Cada vez que subas un index.html actualizado, cambia este numero (ej: 20260711).
    El sistema detecta el cambio y recarga automaticamente la version nueva. */
-var APP_VERSION = "20260907a";
+var APP_VERSION = "20260713a";
 (function(){
   try{
     var key = 'ims_p4_version';
@@ -474,7 +474,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div class="ac" onclick="clearMovs()"><div class="ac-i">🗑️</div><div class="ac-l" id="t-acLimpiarMovs">Limpiar movs.</div><div class="ac-s" id="t-acSoloAdmin">Solo Admin</div></div>
       <div class="ac" onclick="migrateToFirestore()" style="border-color:#2ecc71"><div class="ac-i">☁️</div><div class="ac-l">Sync Firestore</div><div class="ac-s" id="t-acSyncSub">Subir todos los items</div></div>
       <div class="ac" onclick="cleanDuplicates()" style="border-color:#e74c3c"><div class="ac-i">🧹</div><div class="ac-l" id="t-acLimpiarDup">Limpiar duplicados</div><div class="ac-s" id="t-acLimpiarDupSub">Eliminar IDs viejos</div></div>
-      <div class="ac" onclick="abrirReporteFecha()" style="border-color:rgba(37,99,235,.4)"><div class="ac-i">📅</div><div class="ac-l">Reporte a fecha</div><div class="ac-s">Inventario histórico</div></div>
       <div class="ac" onclick="resetStock()"><div class="ac-i">🔄</div><div class="ac-l" id="t-acReset">Reset stock</div><div class="ac-s" id="t-acResetSub">Volver a inicial</div></div>
       <div class="ac" onclick="abrirCargaExcel()" style="border-color:rgba(0,230,118,.3)"><div class="ac-i">📥</div><div class="ac-l" id="t-acCargarExcel">Cargar Excel</div><div class="ac-s" id="t-acCargarExcelSub">Reemplazar inventario</div></div>
       <div class="ac" onclick="abrirImportPrecios()" style="border-color:rgba(255,179,0,.4)"><div class="ac-i">💲</div><div class="ac-l" id="t-acImportPrecios">Importar Precios</div><div class="ac-s" id="t-acImportPreciosSub">Desde Excel PN+Price</div></div>
@@ -648,19 +647,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   </div>
 </div>
 
-<div id="modalReporteFecha" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:600;align-items:flex-end;justify-content:center;backdrop-filter:blur(4px)">
-  <div style="background:var(--bg2);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:1.5rem 1.2rem 2.5rem;border-top:1px solid var(--border2);max-height:90vh;overflow-y:auto">
-    <div style="width:36px;height:3px;border-radius:2px;background:var(--border2);margin:0 auto 1.2rem"></div>
-    <div style="font-family:'Rajdhani',sans-serif;font-size:17px;font-weight:700;margin-bottom:.2rem">📅 Reporte de Inventario a Fecha</div>
-    <div style="font-size:11px;color:var(--text2);margin-bottom:1rem">Reconstruye el stock de cada parte al final del día elegido, usando el historial guardado.</div>
-    <label style="font-size:11px;color:var(--text2);text-transform:uppercase;display:block;margin-bottom:5px">Fecha de corte</label>
-    <input type="date" id="repFechaCorte" class="ref-in" style="margin:0 0 12px" value="2026-07-31">
-    <button class="btn-conf bc-E" onclick="generarReporteFecha()" id="repBtnGenerar">📊 Generar y descargar Excel</button>
-    <div id="repStatus" style="margin-top:10px;font-size:12px;display:none;padding:8px 10px;border-radius:8px"></div>
-    <button class="btn btn-secondary btn-sm" style="width:100%;margin-top:10px" onclick="document.getElementById('modalReporteFecha').style.display='none'">Cerrar</button>
-  </div>
-</div>
-
 <div class="modal-overlay" id="modal" onclick="closeModal()">
   <div class="modal-sheet" onclick="event.stopPropagation()">
     <div class="modal-drag"></div>
@@ -726,8 +712,6 @@ let user = JSON.parse(localStorage.getItem('ims4_user')||'null');
 let _blockSnapshot = false;
 let selIdx = null, movTipo = 'E', invFam = 'TODOS', histFam = 'TODOS', selRole = 'admin';
 let db = null, auth = null, unsub = null;
-const MASTER_EMAIL = 'tvxesp963@gmail.com'; // único usuario que puede editar PN/Desc/Familia/Inventario/Precio directamente
-function isMaster() { return !!(user && (user.email||'').toLowerCase() === MASTER_EMAIL); }
 
 function saveLocal() {
   localStorage.setItem('ims4_items', JSON.stringify(items));
@@ -747,31 +731,6 @@ function openEdit(idx) {
   document.getElementById('editPrecio').value = Number(i.precio)||0;
   document.getElementById('editEstatus').value = i.estatus || 'DONE';
   document.getElementById('editUbic').value = i.ubicacion || 'Almacén';
-
-  // Solo el usuario master puede editar PN/Descripción/Familia/Inventario/Precio directamente
-  var camposMaster = ['editPN','editFam','editDesc','editInicial','editEntradas','editSalidas','editPrecio'];
-  var esMaster = isMaster();
-  camposMaster.forEach(function(id){
-    var el = document.getElementById(id);
-    if (!el) return;
-    el.readOnly = !esMaster;
-    el.disabled = !esMaster;
-    el.style.opacity = esMaster ? '1' : '.6';
-    el.style.cursor = esMaster ? 'text' : 'not-allowed';
-  });
-  var avisoCat = document.getElementById('t-avisoSoloLecturaCat');
-  var avisoInv = document.getElementById('t-avisoSoloLecturaInv');
-  if (avisoCat) avisoCat.style.display = esMaster ? 'none' : '';
-  if (avisoInv) avisoInv.style.display = esMaster ? 'none' : '';
-  if (esMaster) {
-    var editEnt = document.getElementById('editEntradas');
-    var editSal = document.getElementById('editSalidas');
-    var editIni = document.getElementById('editInicial');
-    if (editEnt) editEnt.oninput = _editRecalcStock;
-    if (editSal) editSal.oninput = _editRecalcStock;
-    if (editIni) editIni.oninput = _editRecalcStock;
-  }
-
   _editRecalcStock();
   document.getElementById('modalEdit').style.display = 'flex';
 }
@@ -797,33 +756,18 @@ async function saveEdit() {
   const idx = window._editIdx;
   if (idx === undefined || idx === null) return;
   const oldItemRef = items[idx];
-  const esMaster = isMaster();
-  // Para todos los demás usuarios, PN, descripción, familia, inventario y precio son de solo
-  // lectura aquí: siempre se usa el valor original, sin importar lo que tenga el campo
-  // (protección contra manipulación del DOM).
-  // Solo el usuario master (definido en MASTER_EMAIL) puede editar estos campos directamente
-  // desde este mismo modal, igual que antes existía.
-  const newPN = esMaster
-    ? (document.getElementById('editPN').value || '').trim().toUpperCase()
-    : (oldItemRef.pn || '').trim().toUpperCase();
-  const newDesc = esMaster
-    ? (document.getElementById('editDesc').value || '').trim().toUpperCase()
-    : (oldItemRef.desc || '').trim().toUpperCase();
-  const newFam = esMaster
-    ? (document.getElementById('editFam').value || 'Otro')
-    : (oldItemRef.familia || 'Otro');
-  const newIni = esMaster
-    ? Math.round(parseFloat(document.getElementById('editInicial').value)||0)
-    : Math.round(parseFloat(oldItemRef.inicial)||0);
-  const newEnt = esMaster
-    ? Math.round(parseFloat(document.getElementById('editEntradas').value)||0)
-    : Math.round(parseFloat(oldItemRef.entradas)||0);
-  const newSal = esMaster
-    ? Math.round(parseFloat(document.getElementById('editSalidas').value)||0)
-    : Math.round(parseFloat(oldItemRef.salidas)||0);
-  const newPrecio = esMaster
-    ? parseFloat(document.getElementById('editPrecio').value)||0
-    : parseFloat(oldItemRef.precio)||0;
+  // PN, descripción, familia, inventario y precio son de solo lectura aquí: siempre se usa el
+  // valor original, sin importar lo que tenga el campo (protección contra manipulación del DOM).
+  // Para cambiar PN/Familia/Descripción usar el BOM Simulator.
+  // Para cambiar inventario (entradas/salidas) usar el módulo de Movimientos.
+  // Para cambiar precio usar 💲 Importar Precios en Admin.
+  const newPN = (oldItemRef.pn || '').trim().toUpperCase();
+  const newDesc = (oldItemRef.desc || '').trim().toUpperCase();
+  const newFam = oldItemRef.familia || 'Otro';
+  const newIni = Math.round(parseFloat(oldItemRef.inicial)||0);
+  const newEnt = Math.round(parseFloat(oldItemRef.entradas)||0);
+  const newSal = Math.round(parseFloat(oldItemRef.salidas)||0);
+  const newPrecio = parseFloat(oldItemRef.precio)||0;
   const newEstatus = document.getElementById('editEstatus').value;
   const newUbic = document.getElementById('editUbic').value.trim() || 'Almacén';
   if (!newPN) { toast('Part Number requerido','err'); return; }
@@ -834,15 +778,6 @@ async function saveEdit() {
   var cambios = [];
   if ((oldItem.estatus||'') !== newEstatus) cambios.push('estatus: '+(oldItem.estatus||'')+'→'+newEstatus);
   if ((oldItem.ubicacion||'Almacén') !== newUbic) cambios.push('ubicación: '+(oldItem.ubicacion||'Almacén')+'→'+newUbic);
-  if (esMaster) {
-    if ((oldItem.pn||'') !== newPN) cambios.push('PN: '+(oldItem.pn||'')+'→'+newPN);
-    if ((oldItem.desc||'') !== newDesc) cambios.push('desc: '+(oldItem.desc||'')+'→'+newDesc);
-    if ((oldItem.familia||'') !== newFam) cambios.push('familia: '+(oldItem.familia||'')+'→'+newFam);
-    if (Math.round(parseFloat(oldItem.inicial)||0) !== newIni) cambios.push('inicial: '+(oldItem.inicial||0)+'→'+newIni);
-    if (Math.round(parseFloat(oldItem.entradas)||0) !== newEnt) cambios.push('entradas: '+(oldItem.entradas||0)+'→'+newEnt);
-    if (Math.round(parseFloat(oldItem.salidas)||0) !== newSal) cambios.push('salidas: '+(oldItem.salidas||0)+'→'+newSal);
-    if ((parseFloat(oldItem.precio)||0) !== newPrecio) cambios.push('precio: '+(oldItem.precio||0)+'→'+newPrecio);
-  }
 
   var nuevoHistorial = (oldItem.historial||[]).slice();
   if (cambios.length) {
@@ -972,7 +907,7 @@ window.loadFromFirestore = loadFromFirestore;
 
 function startSync() {
   if (!db) return;
-  unsub = db.collection('planta4_movimientos').orderBy('fecha','desc').limit(500)
+  unsub = db.collection('planta4_movimientos').orderBy('fecha','desc').limit(50)
     .onSnapshot(snap => {
       const fm = [];
       snap.forEach(d => fm.push(d.data()));
@@ -1026,13 +961,8 @@ async function pushMov(mov) {
   if (!db) return;
   try {
     await db.collection('planta4_movimientos').add(mov);
-    const movItem = items.find(i=>i.pn===mov.pn && i.desc===mov.desc);
-    if (!movItem) {
-      console.error('⚠️ pushMov: no hay match EXACTO de PN+Descripción, se omite para no tocar la parte equivocada:', mov.pn, '|', mov.desc);
-      toast('⚠️ No se encontró la parte exacta (' + mov.pn + ') — el movimiento se registró en historial pero el stock NO se actualizó. Revísalo manualmente.', 'err');
-      return;
-    }
-    await db.collection('planta4_inventario').doc(getDocId(mov.pn,movItem.desc)).set(movItem, {merge:true});
+    const movItem = items.find(i=>i.pn===mov.pn && i.desc===mov.desc) || items.find(i=>i.pn===mov.pn);
+    if(movItem) await db.collection('planta4_inventario').doc(getDocId(mov.pn,movItem.desc)).set(movItem, {merge:true});
   } catch(e) {}
 }
 
@@ -2207,32 +2137,17 @@ function setHistF(f,el) { histFam=f; document.querySelectorAll('#pgHist .ft').fo
 function renderHist() {
   const q = (document.getElementById('histS')||{value:''}).value.toLowerCase();
   let f = [...movs];
-  if (histFam!=='TODOS') f=f.filter(m=>{
-    const tipoNorm = m.tipo==='OUT' ? 'S' : m.tipo==='IN' ? 'E' : m.tipo;
-    return tipoNorm===histFam;
-  });
-  if (q) {
-    const terms = q.split(' ').filter(Boolean);
-    f = f.filter(m => {
-      const texto = ((m.pn||'')+' '+(m.desc||'')).toLowerCase();
-      return terms.every(t => texto.includes(t));
-    });
-  }
+  if (histFam!=='TODOS') f=f.filter(m=>m.tipo===histFam);
+  if (q) f=f.filter(m=>m.pn&&m.pn.toLowerCase().includes(q));
   const el = document.getElementById('histList');
   el.innerHTML = f.length ? f.slice(0,60).map(movHTML).join('') : '<div class="empty">📋<br>Sin movimientos</div>';
 }
 function movHTML(m) {
-  // Normaliza campos: el MES (Cierre de Jornada) usa nombres distintos a los nativos de IMS
-  const tipoNorm = m.tipo==='OUT' ? 'S' : m.tipo==='IN' ? 'E' : m.tipo;
-  const qty = (m.qty!==undefined && m.qty!==null) ? m.qty : (m.cantidad||0);
-  const loc = m.loc || m.ubicacion || '–';
-  const usr = m.user || m.usuario || '';
-  const ref = m.ref || m.referencia || '';
   const icons={E:'⬇️',S:'⬆️',T:'🔀',INI:'🏁'};
   const cols={E:'mb-E',S:'mb-S',T:'mb-T',INI:'mb-T'};
   const qc={E:'color:var(--green)',S:'color:var(--red)',T:'color:var(--accent)'};
   const signs={E:'+',S:'-',T:'→'};
-  return '<div class="mc"><div class="mb '+(cols[tipoNorm]||'mb-T')+'">'+(icons[tipoNorm]||'🔄')+'</div><div style="flex:1;min-width:0"><div class="mc-t">'+(m.pn||'–')+'</div><div class="mc-d">'+(m.desc||'')+' · '+(m.familia||'')+' · '+usr+'</div><div class="mc-l">📍 '+loc+' · '+fmtDate(m.fecha)+(ref?' · '+ref:'')+'</div></div><div class="mc-q" style="'+(qc[tipoNorm]||'')+'">'+(signs[tipoNorm]||'')+qty+'</div></div>';
+  return '<div class="mc"><div class="mb '+(cols[m.tipo]||'mb-T')+'">'+(icons[m.tipo]||'🔄')+'</div><div style="flex:1;min-width:0"><div class="mc-t">'+(m.pn||'–')+'</div><div class="mc-d">'+(m.desc||'')+' · '+(m.familia||'')+' · '+(m.user||'')+'</div><div class="mc-l">📍 '+(m.loc||'–')+' · '+fmtDate(m.fecha)+(m.ref?' · '+m.ref:'')+'</div></div><div class="mc-q" style="'+(qc[m.tipo]||'')+'">'+(signs[m.tipo]||'')+(m.qty||0)+'</div></div>';
 }
 
 // ── ADMIN ──
@@ -2857,7 +2772,6 @@ function xlsConfirmar(){
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script>
 var _ipDatos={};
 
@@ -3384,160 +3298,6 @@ function guardarConfigMonitor(){
     setTimeout(cerrarConfigMonitor,1500);
   }
 }
-
-// ── REPORTE DE INVENTARIO A FECHA ──
-function abrirReporteFecha(){
-  document.getElementById('repStatus').style.display='none';
-  document.getElementById('modalReporteFecha').style.display='flex';
-}
-window.abrirReporteFecha = abrirReporteFecha;
-
-function _repStockAlaFecha(historial, cutoffMs){
-  if (!Array.isArray(historial) || historial.length===0) return null;
-  const ord = historial.filter(h=>h&&h.fecha)
-    .map(h=>({...h,_t:new Date(h.fecha).getTime()}))
-    .filter(h=>!isNaN(h._t)&&h._t<=cutoffMs)
-    .sort((a,b)=>a._t-b._t);
-  if (ord.length===0) return null;
-  let stock=0;
-  for(const h of ord){
-    const qty = Number(h.qty)||0;
-    if (h.tipo==='INI') stock=qty;
-    else if (h.tipo==='E') stock+=qty;
-    else if (h.tipo==='EDIT') stock=qty;
-    else stock-=qty; // S, T
-  }
-  return stock;
-}
-
-async function generarReporteFecha(){
-  if (!db) { toast('❌ Sin conexión a Firebase','err'); return; }
-  const fechaInput = document.getElementById('repFechaCorte').value;
-  if (!fechaInput) { toast('Elige una fecha','err'); return; }
-  const cutoffMs = new Date(fechaInput+'T23:59:59.999').getTime();
-  const btn = document.getElementById('repBtnGenerar');
-  const st = document.getElementById('repStatus');
-  btn.disabled = true;
-  st.style.display='block'; st.style.background='rgba(55,138,221,.15)'; st.style.color='var(--accent)';
-  st.textContent = 'Leyendo Firestore...';
-  try {
-    const snap = await db.collection('planta4_inventario').get();
-    const filas = []; let totalValor=0;
-    const conteoPN = {};
-    snap.forEach(doc=>{
-      const it = doc.data();
-      const pn = (it.pn||'').trim();
-      if (pn){ if(!conteoPN[pn]) conteoPN[pn]=[]; conteoPN[pn].push(doc.id); }
-      const stock = _repStockAlaFecha(it.historial, cutoffMs);
-      if (stock===null) return;
-      const precio = Number(it.precio)||0;
-      const valor = stock*precio;
-      totalValor += valor;
-      filas.push({familia:it.familia||'SIN FAMILIA', pn:it.pn||'', desc:it.desc||'', stock, precio, valor:Math.round(valor*100)/100});
-    });
-    if (filas.length===0){ st.style.background='#fee2e2'; st.style.color='#991b1b'; st.textContent='No hay partes con historial hasta esa fecha.'; btn.disabled=false; return; }
-    filas.sort((a,b)=>(a.familia+a.pn).localeCompare(b.familia+b.pn));
-
-    const porFam = {};
-    filas.forEach(f=>{ if(!porFam[f.familia]) porFam[f.familia]={l:0,u:0,v:0}; porFam[f.familia].l++; porFam[f.familia].u+=f.stock; porFam[f.familia].v+=f.valor; });
-    const familias = Object.keys(porFam).sort();
-
-    const negativos = filas.filter(f=>f.stock<0);
-    const dup = [];
-    Object.keys(conteoPN).forEach(pn=>{ if(conteoPN[pn].length>1) conteoPN[pn].forEach(id=>dup.push({pn, id})); });
-
-    st.textContent = 'Dando formato al Excel...';
-
-    const AZUL='FF1F4E78', AZUL_CLARO='FFDCE6F1', BLANCO='FFFFFFFF', ROJO_CLARO='FFFCE4E4', ROJO_TXT='FFB42318';
-    const borde = { top:{style:'thin',color:{argb:'FFD0D0D0'}}, bottom:{style:'thin',color:{argb:'FFD0D0D0'}}, left:{style:'thin',color:{argb:'FFD0D0D0'}}, right:{style:'thin',color:{argb:'FFD0D0D0'}} };
-    function headerRow(ws, headers){
-      const r = ws.addRow(headers);
-      r.eachCell(c=>{ c.font={bold:true,color:{argb:BLANCO},size:11}; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:AZUL}}; c.alignment={vertical:'middle',horizontal:'center'}; c.border=borde; });
-      r.height=20;
-      ws.views=[{state:'frozen', ySplit: r.number}];
-      return r;
-    }
-    function moneyCell(c,v){ c.value=v; c.numFmt='"$"#,##0.00'; c.alignment={horizontal:'right'}; c.border=borde; }
-    function numCell(c,v){ c.value=v; c.numFmt='#,##0.##'; c.alignment={horizontal:'right'}; c.border=borde; }
-
-    const wb = new ExcelJS.Workbook();
-    wb.creator='IMS Planta 4'; wb.created=new Date();
-
-    // ===== Resumen =====
-    const wsR = wb.addWorksheet('Resumen');
-    wsR.columns=[{width:24},{width:12},{width:16},{width:16}];
-    headerRow(wsR, ['Familia','# Líneas','Inventario Total','Valor Total ($)']);
-    familias.forEach(fam=>{
-      const d=porFam[fam];
-      const r = wsR.addRow([fam, d.l, Math.round(d.u*100)/100, Math.round(d.v*100)/100]);
-      r.getCell(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:AZUL_CLARO}};
-      r.getCell(1).font={bold:true};
-      r.eachCell(c=>{c.border=borde;});
-      moneyCell(r.getCell(4), Math.round(d.v*100)/100);
-      numCell(r.getCell(3), Math.round(d.u*100)/100);
-    });
-    const totalRow = wsR.addRow(['TOTAL', filas.length, filas.reduce((s,f)=>s+f.stock,0), Math.round(totalValor*100)/100]);
-    totalRow.eachCell(c=>{ c.font={bold:true,color:{argb:BLANCO}}; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:AZUL}}; c.border=borde; });
-    moneyCell(totalRow.getCell(4), Math.round(totalValor*100)/100);
-    numCell(totalRow.getCell(3), filas.reduce((s,f)=>s+f.stock,0));
-
-    // ===== Detalle (agrupado por familia) =====
-    const wsD = wb.addWorksheet('Detalle');
-    wsD.columns=[{width:16},{width:34},{width:14},{width:14},{width:14}];
-    headerRow(wsD, ['Part Number','Descripción','Inventario al '+fechaInput,'Precio Unit ($)','Valor ($)']);
-    familias.forEach(fam=>{
-      const gr = wsD.addRow([fam,'','','','']);
-      wsD.mergeCells(gr.number,1,gr.number,5);
-      gr.getCell(1).font={bold:true};
-      gr.getCell(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:AZUL_CLARO}};
-      gr.eachCell(c=>{c.border=borde;});
-      filas.filter(f=>f.familia===fam).forEach(f=>{
-        const r = wsD.addRow([f.pn, f.desc, f.stock, f.precio, f.valor]);
-        r.eachCell(c=>{c.border=borde;});
-        numCell(r.getCell(3), f.stock);
-        moneyCell(r.getCell(4), f.precio);
-        moneyCell(r.getCell(5), f.valor);
-        if (f.stock<0){ r.eachCell(c=>{c.fill={type:'pattern',pattern:'solid',fgColor:{argb:ROJO_CLARO}};}); r.getCell(3).font={color:{argb:ROJO_TXT},bold:true}; }
-      });
-    });
-
-    // ===== Revisar (negativos) =====
-    if (negativos.length){
-      const wsN = wb.addWorksheet('Revisar (negativos)');
-      wsN.columns=[{width:20},{width:16},{width:34},{width:14}];
-      headerRow(wsN, ['Familia','Part Number','Descripción','Inventario al '+fechaInput]);
-      negativos.forEach(f=>{
-        const r = wsN.addRow([f.familia,f.pn,f.desc,f.stock]);
-        r.eachCell(c=>{c.border=borde; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:ROJO_CLARO}};});
-        r.getCell(4).font={color:{argb:ROJO_TXT},bold:true};
-      });
-    }
-
-    // ===== PN Duplicados =====
-    if (dup.length){
-      const wsP = wb.addWorksheet('PN Duplicados');
-      wsP.columns=[{width:20},{width:34}];
-      headerRow(wsP, ['Part Number','Firestore Doc ID']);
-      dup.forEach(d=>{ const r=wsP.addRow([d.pn,d.id]); r.eachCell(c=>{c.border=borde;}); });
-    }
-
-    st.textContent = 'Guardando archivo...';
-    const buf = await wb.xlsx.writeBuffer();
-    const blob = new Blob([buf], {type:'application/octet-stream'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href=url; a.download='Inventario_P4_'+fechaInput.replace(/-/g,'')+'.xlsx';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    st.style.background='#dcfce7'; st.style.color='#166534';
-    st.textContent = '✅ Excel generado · '+filas.length+' partes';
-  } catch(err){
-    st.style.background='#fee2e2'; st.style.color='#991b1b';
-    st.textContent = '❌ Error: '+err.message;
-  } finally { btn.disabled=false; }
-}
-window.generarReporteFecha = generarReporteFecha;
 </script>
 
 </body>
