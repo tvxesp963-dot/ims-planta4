@@ -435,11 +435,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   </div>
 
   <div id="pgHist" class="page">
-    <div class="ftabs">
-      <div class="ft on" onclick="setHistF('TODOS',this)" id="t-histTodos">Todos</div>
-      <div class="ft" onclick="setHistF('E',this)"><span id="t-histEntradas">⬇️ Entradas</span></div>
-      <div class="ft" onclick="setHistF('S',this)"><span id="t-histSalidas">⬆️ Salidas</span></div>
-      <div class="ft" onclick="setHistF('T',this)"><span id="t-histTraslados">🔀 Traslados</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.7rem">
+      <div class="ftabs" style="margin-bottom:0">
+        <div class="ft on" onclick="setHistF('TODOS',this)" id="t-histTodos">Todos</div>
+        <div class="ft" onclick="setHistF('E',this)"><span id="t-histEntradas">⬇️ Entradas</span></div>
+        <div class="ft" onclick="setHistF('S',this)"><span id="t-histSalidas">⬆️ Salidas</span></div>
+        <div class="ft" onclick="setHistF('T',this)"><span id="t-histTraslados">🔀 Traslados</span></div>
+      </div>
+      <button onclick="exportHistExcel()" style="padding:7px 12px;border-radius:8px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">📊 Excel</button>
     </div>
     <div class="sw"><input class="si" id="histS" style="text-transform:uppercase" placeholder="Buscar por PN..." data-t-ph="ph_buscarPNhist" oninput="this.value=this.value.toUpperCase();renderHist()" ><span class="si-ic">🔍</span></div>
     <div id="histList"></div>
@@ -2234,6 +2237,51 @@ function movHTML(m) {
   const signs={E:'+',S:'-',T:'→'};
   return '<div class="mc"><div class="mb '+(cols[tipoNorm]||'mb-T')+'">'+(icons[tipoNorm]||'🔄')+'</div><div style="flex:1;min-width:0"><div class="mc-t">'+(m.pn||'–')+'</div><div class="mc-d">'+(m.desc||'')+' · '+(m.familia||'')+' · '+usr+'</div><div class="mc-l">📍 '+loc+' · '+fmtDate(m.fecha)+(ref?' · '+ref:'')+'</div></div><div class="mc-q" style="'+(qc[tipoNorm]||'')+'">'+(signs[tipoNorm]||'')+qty+'</div></div>';
 }
+
+// Exporta el historial (Historial > Excel) respetando el filtro de tipo y la búsqueda actuales
+function exportHistExcel() {
+  if (typeof XLSX === 'undefined') { toast('❌ Librería Excel no cargada', 'err'); return; }
+  const q = (document.getElementById('histS')||{value:''}).value.toLowerCase();
+  let f = [...movs];
+  if (histFam!=='TODOS') f=f.filter(m=>{
+    const tipoNorm = m.tipo==='OUT' ? 'S' : m.tipo==='IN' ? 'E' : m.tipo;
+    return tipoNorm===histFam;
+  });
+  if (q) {
+    const terms = q.split(' ').filter(Boolean);
+    f = f.filter(m => {
+      const texto = ((m.pn||'')+' '+(m.desc||'')).toLowerCase();
+      return terms.every(t => texto.includes(t));
+    });
+  }
+  if (!f.length) { toast('No hay movimientos para exportar con el filtro actual', 'warn'); return; }
+
+  const tipoLabel = {E:'Entrada',S:'Salida',T:'Traslado',INI:'Inv. Inicial'};
+  const rows = [['Tipo','PN','Descripción','Familia','Cantidad','Ubicación','Usuario','Referencia','Fecha']];
+  f.forEach(function(m){
+    const tipoNorm = m.tipo==='OUT' ? 'S' : m.tipo==='IN' ? 'E' : m.tipo;
+    rows.push([
+      tipoLabel[tipoNorm]||tipoNorm||'',
+      m.pn||'',
+      m.desc||'',
+      m.familia||'',
+      (m.qty!==undefined && m.qty!==null) ? m.qty : (m.cantidad||0),
+      m.loc || m.ubicacion || '',
+      m.user || m.usuario || '',
+      m.ref || m.referencia || '',
+      fmtDate(m.fecha)
+    ]);
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:14},{wch:30},{wch:10},{wch:10},{wch:12},{wch:14},{wch:16},{wch:18}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Historial');
+  const filtroNombre = histFam==='TODOS'?'Todos':histFam;
+  XLSX.writeFile(wb, 'Historial_'+filtroNombre+'_'+new Date().toISOString().split('T')[0]+'.xlsx');
+  toast('✅ Excel descargado · '+f.length+' movimientos', 'ok');
+}
+window.exportHistExcel = exportHistExcel;
 
 // ── ADMIN ──
 async function loadImsUsers() {
