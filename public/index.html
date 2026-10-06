@@ -376,6 +376,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         <div style="font-size:13px;font-weight:500" id="t-escanearQR">Escanear QR del material</div>
         <div style="font-size:10px;opacity:.6;margin-top:2px" id="t-tocaActivar">Toca para activar la cámara</div>
       </div>
+      <label style="display:block;text-align:center;font-size:12px;color:var(--accent);cursor:pointer;margin-top:-.2rem;margin-bottom:.4rem">🖼️ Leer QR desde una foto
+        <input type="file" accept="image/*" style="display:none" onchange="leerQRFoto(this)">
+      </label>
     </div>
     <div class="sw"><input class="si" id="movS" style="text-transform:uppercase" placeholder="O busca el Part Number..." data-t-ph="ph_buscaPN" oninput="this.value=this.value.toUpperCase();renderMovList()" ><span class="si-ic">🔍</span></div>
     <div id="movList" style="max-height:160px;overflow-y:auto;margin-bottom:.7rem"></div>
@@ -2115,7 +2118,7 @@ async function startScan(){
     const video=document.getElementById('scanVideo');
     const preview=document.getElementById('scanPreview');
     const btn=document.getElementById('scanBtn');
-    const constraints={video:{facingMode:{ideal:'environment'}},audio:false};
+    const constraints={video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false};
     scanStream=await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject=scanStream;
     video.setAttribute('playsinline','true');
@@ -2137,23 +2140,60 @@ async function startScan(){
     scanActive=false;
   }
 }
-function scanFrame(){
+// Lector de QR: usa el detector nativo del celular (más potente) y, si no existe, jsQR
+async function decodificarQR(canvas){
+  if ('BarcodeDetector' in window) {
+    try {
+      window._bd = window._bd || new BarcodeDetector({formats:['qr_code']});
+      const r = await window._bd.detect(canvas);
+      if (r && r[0] && r[0].rawValue) return r[0].rawValue;
+    } catch(e) {}
+  }
+  const ctx = canvas.getContext('2d');
+  const img = ctx.getImageData(0,0,canvas.width,canvas.height);
+  const code = jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});
+  return (code && code.data) ? code.data : null;
+}
+let _scanBusy=false;
+async function scanFrame(){
   const video=document.getElementById('scanVideo');
   const canvas=document.getElementById('scanCanvas');
-  if(!video||!scanActive||video.readyState<2) return;
+  if(!video||!scanActive||video.readyState<2||_scanBusy) return;
+  _scanBusy=true;
   try{
     canvas.width=video.videoWidth||320;
     canvas.height=video.videoHeight||240;
     const ctx=canvas.getContext('2d');
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
-    const img=ctx.getImageData(0,0,canvas.width,canvas.height);
-    const code=jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});
-    if(code&&code.data){
+    const txt=await decodificarQR(canvas);
+    if(txt && scanActive){
       stopScan();
-      processQRScan(code.data);
+      processQRScan(txt);
     }
   }catch(e){console.warn('scan:',e);}
+  _scanBusy=false;
 }
+// Leer el QR desde una foto o captura guardada en el celular
+function leerQRFoto(inp){
+  const f=inp.files&&inp.files[0]; if(!f) return;
+  const img=new Image();
+  img.onload=async function(){
+    let txt=null;
+    for (const esc of [1,2,3]) {
+      const c=document.createElement('canvas');
+      c.width=Math.min(3000,Math.round(img.width*esc)); c.height=Math.round(img.height*(c.width/img.width));
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      txt=await decodificarQR(c);
+      if(txt) break;
+    }
+    inp.value='';
+    URL.revokeObjectURL(img.src);
+    if(txt) processQRScan(txt); else toast('❌ No se pudo leer el QR de la foto. Acércate más o toma otra foto','err');
+  };
+  img.onerror=function(){ toast('❌ No se pudo abrir la foto','err'); };
+  img.src=URL.createObjectURL(f);
+}
+window.leerQRFoto=leerQRFoto;
 function stopScan(){
   scanActive=false;
   if(scanInterval){clearInterval(scanInterval);scanInterval=null;}
