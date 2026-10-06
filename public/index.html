@@ -1959,14 +1959,22 @@ function selForMov(idx) {
 function adjQ(d) { const inp=document.getElementById('mfQty'); inp.value=Math.max(1,(parseInt(inp.value)||0)+d); }
 
 var _movBusy=false;
-async function doMov(){ if(_movBusy) return; _movBusy=true; try{ await doMovInner(); } finally { _movBusy=false; } }
+async function doMov(){
+  if(_movBusy) { toast('⏳ Espera, se está registrando…','info'); return; }
+  _movBusy=true;
+  const wd=setTimeout(()=>{ _movBusy=false; },20000); // seguro: nunca se queda trabado más de 20 s
+  try{ toast('⏳ Registrando…','info'); await doMovInner(); }
+  catch(e){ console.error(e); toast('❌ Error al registrar: '+(e&&e.message?e.message:e),'err'); }
+  finally { clearTimeout(wd); _movBusy=false; }
+}
 // Reclama el pallet de forma atómica: solo UNA persona/escaneo puede pasarlo de PENDING a RECEIVED
 async function reclamarPallet(){
   if(!scanPallet) return {ok:true};
   const ref=db.collection('pallets_medio').doc(scanPallet.id);
   const por=(user&&user.name)||'', ahora=new Date().toISOString();
   try{
-    return await db.runTransaction(async tx=>{
+    const espera=new Promise(res=>setTimeout(()=>res({ok:false,msg:'Tiempo agotado verificando el pallet (red o permisos). Intenta de nuevo.'}),10000));
+    const trabajo=db.runTransaction(async tx=>{
       const d=await tx.get(ref);
       if(d.exists){
         const st=d.data().status;
@@ -1979,6 +1987,7 @@ async function reclamarPallet(){
       }
       return {ok:true,maq:''};
     });
+    return await Promise.race([trabajo,espera]);
   }catch(e){ return {ok:false,msg:'No se pudo verificar el pallet (red o permiso): '+e.message}; }
 }
 async function doMovInner() {
@@ -1992,8 +2001,15 @@ async function doMovInner() {
   const ref = document.getElementById('mfRef').value.trim();
   let palletInfo = null;
   if (scanPallet && movTipo==='E' && ref.toUpperCase()===scanPallet.id.toUpperCase()) {
+    const candL = (qty===scanPallet.qty) ? buscarEntradaManual(item.pn,qty) : null;
+    if (candL && confirm(txtLigar(candL,scanPallet.id,qty))) {
+      await ligarPallet(candL,scanPallet.id);
+      limpiarFormMov();
+      toast('✅ Pallet ligado a la entrada existente (sin sumar de nuevo)','ok');
+      return;
+    }
     const rc = await reclamarPallet();
-    if (!rc.ok) { toast('⚠️ '+rc.msg,'err'); scanPallet=null; document.getElementById('mfRef').value=''; return; }
+    if (!rc.ok) { limpiarFormMov(); alert('⚠️ '+rc.msg); return; }
     palletInfo = {id:scanPallet.id, maq:rc.maq||''};
     scanPallet=null; // ya reclamado: no volver a marcarlo después
   } else if (movTipo==='E' && /^GH69/i.test(item.pn||'')) {
@@ -2282,6 +2298,24 @@ window.stopInvScan=stopInvScan;
 // ── PALLET DE LÍNEA (QR con cantidad e ID: PN|DESC|FAMILIA|CANTIDAD|ID-PALLET) ──
 var scanPallet=null;
 var PALLET_DEST='IMS P4';
+function limpiarFormMov(){ try{ scanPallet=null; selIdx=null; document.getElementById('movForm').className='mf'; document.getElementById('mfRef').value=''; }catch(e){} }
+function buscarEntradaManual(pn,q){
+  const pnS=String(pn||'').trim().toUpperCase();
+  return (typeof movs!=='undefined'?movs:[]).find(m=>(m.tipo==='E'||m.tipo==='IN') && String(m.pn||'').trim().toUpperCase()===pnS && Number(m.qty)===Number(q) && !(m.ref||m.referencia) && (Date.now()-new Date(m.fecha).getTime())<3*864e5);
+}
+// Liga un pallet a una entrada manual que ya existe, SIN sumar de nuevo al stock
+async function ligarPallet(cand,id){
+  const pd=await db.collection('pallets_medio').doc(id).get();
+  const maq=(pd.exists&&pd.data().maquina)||'';
+  const qs=await db.collection('planta4_movimientos').where('fecha','==',cand.fecha).where('pn','==',cand.pn).limit(1).get();
+  if(!qs.empty) await qs.docs[0].ref.update({ref:id,origen:'LINEA',pallet:id,maq:maq});
+  const por=(user&&user.name)||'', ahora=new Date().toISOString();
+  if(pd.exists) await db.collection('pallets_medio').doc(id).update({status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora,vinculadoManual:true});
+  else await db.collection('pallets_medio').doc(id).set({status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora,vinculadoManual:true,creadoDesdeIMS:true});
+  cand.ref=id; cand.origen='LINEA'; cand.pallet=id; cand.maq=maq;
+  try{ saveLocal(); renderHist(); }catch(e){}
+}
+function txtLigar(cand,id,q){ return 'Ya existe una entrada MANUAL de '+Number(q).toLocaleString()+' pzas de '+cand.pn+' ('+new Date(cand.fecha).toLocaleString()+') sin etiqueta.\n\n¿Ligar el pallet '+id+' a esa entrada SIN sumar de nuevo?\n\nAceptar = ligar sin sumar\nCancelar = dar entrada nueva (se suma al stock)'; }
 async function aplicarPallet(parts){
   scanPallet=null;
   var q=parseInt(parts[3]), id=(parts[4]||'').trim();
@@ -2293,26 +2327,18 @@ async function aplicarPallet(parts){
     var d=await db.collection('pallets_medio').doc(id).get();
     if(d.exists){
       var p=d.data();
-      if(p.status==='RECEIVED') toast('⚠️ Pallet '+id+' YA fue recibido ('+(p.recibidoEn||'')+')','err');
-      else if(p.status==='VOID') toast('⚠️ Pallet '+id+' está ANULADO','err');
+      if(p.status==='RECEIVED'){ limpiarFormMov(); alert('⚠️ El pallet '+id+' YA fue escaneado'+(p.recibidoFecha?' el '+new Date(p.recibidoFecha).toLocaleString():'')+(p.recibidoPor?' por '+p.recibidoPor:'')+'.\n\nNo se registra de nuevo.'); return; }
+      else if(p.status==='VOID'){ limpiarFormMov(); alert('⚠️ El pallet '+id+' está ANULADO. No se puede recibir.'); return; }
       else if(p.destino&&p.destino!==PALLET_DEST) toast('⚠️ Este pallet es para '+p.destino,'err');
-      else if(p.status!=='RECEIVED'){
-        // ¿Ya se dio entrada manual a este pallet (misma parte y cantidad, sin etiqueta)? Ligarlo SIN sumar otra vez
-        const pnS=String(parts[0]||'').trim().toUpperCase();
-        const cand=(typeof movs!=='undefined'?movs:[]).find(m=>(m.tipo==='E'||m.tipo==='IN') && String(m.pn||'').trim().toUpperCase()===pnS && Number(m.qty)===q && !(m.ref||m.referencia) && (Date.now()-new Date(m.fecha).getTime())<3*864e5);
-        if(cand && confirm('Ya existe una entrada MANUAL de '+q.toLocaleString()+' pzas de '+pnS+' ('+new Date(cand.fecha).toLocaleString()+') sin etiqueta.\n\n¿Ligar este pallet '+id+' a esa entrada SIN sumar de nuevo?\n(Aceptar = ligar sin sumar · Cancelar = dar entrada nueva)')){
-          const qs=await db.collection('planta4_movimientos').where('fecha','==',cand.fecha).where('pn','==',cand.pn).limit(1).get();
-          if(!qs.empty) await qs.docs[0].ref.update({ref:id,origen:'LINEA',pallet:id,maq:p.maquina||''});
-          await db.collection('pallets_medio').doc(id).update({status:'RECEIVED',recibidoEn:'P4',recibidoPor:(user&&user.name)||'',recibidoFecha:new Date().toISOString(),vinculadoManual:true});
-          cand.ref=id; cand.origen='LINEA'; cand.pallet=id; cand.maq=p.maquina||'';
-          scanPallet=null; selIdx=null;
-          try{ document.getElementById('movForm').className='mf'; document.getElementById('mfRef').value=''; }catch(e){}
-          try{ saveLocal(); renderHist(); }catch(e){}
-          toast('✅ Pallet '+id+' ligado a la entrada existente (sin sumar de nuevo)','ok');
-        }
-      }
     }
-  }catch(e){}
+    // ¿Ya se dio entrada manual a este pallet (misma parte y cantidad, sin etiqueta)? Ligarlo SIN sumar otra vez
+    const cand=buscarEntradaManual(parts[0],q);
+    if(cand && confirm(txtLigar(cand,id,q))){
+      await ligarPallet(cand,id);
+      limpiarFormMov();
+      toast('✅ Pallet '+id+' ligado a la entrada existente (sin sumar de nuevo)','ok');
+    }
+  }catch(e){ console.error(e); toast('⚠️ No se pudo verificar/ligar el pallet: '+(e&&e.message?e.message:e),'err'); }
 }
 async function marcarPalletRecibido(ref){
   if(!scanPallet||!ref||ref.toUpperCase()!==scanPallet.id.toUpperCase()) return;
