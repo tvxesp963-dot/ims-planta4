@@ -1970,10 +1970,11 @@ async function reclamarPallet(){
         if(st==='RECEIVED') return {ok:false,msg:'Pallet '+scanPallet.id+' YA fue escaneado'+(d.data().recibidoFecha?' el '+new Date(d.data().recibidoFecha).toLocaleString():'')+(d.data().recibidoPor?' por '+d.data().recibidoPor:'')+' — no se registra de nuevo'};
         if(st==='VOID') return {ok:false,msg:'Pallet '+scanPallet.id+' está ANULADO — no se puede recibir'};
         tx.update(ref,{status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora});
+        return {ok:true,maq:d.data().maquina||''};
       } else {
         tx.set(ref,{status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora,creadoDesdeIMS:true});
       }
-      return {ok:true};
+      return {ok:true,maq:''};
     });
   }catch(e){ return {ok:false,msg:'No se pudo verificar el pallet (red o permiso): '+e.message}; }
 }
@@ -1986,10 +1987,14 @@ async function doMovInner() {
   if (movTipo==='S'&&qty>item.actual) { toast('Stock insuficiente: '+item.actual.toLocaleString()+' disponibles','err'); return; }
   const dest = document.getElementById('mfDest').value;
   const ref = document.getElementById('mfRef').value.trim();
+  let palletInfo = null;
   if (scanPallet && movTipo==='E' && ref.toUpperCase()===scanPallet.id.toUpperCase()) {
     const rc = await reclamarPallet();
     if (!rc.ok) { toast('⚠️ '+rc.msg,'err'); scanPallet=null; document.getElementById('mfRef').value=''; return; }
+    palletInfo = {id:scanPallet.id, maq:rc.maq||''};
     scanPallet=null; // ya reclamado: no volver a marcarlo después
+  } else if (movTipo==='E' && /^GH69/i.test(item.pn||'')) {
+    if (!confirm('Esta parte viene de línea (medio proceso) y NO escaneaste la etiqueta del pallet.\n\nSin la etiqueta, la entrada no queda ligada al pallet de la línea.\n\n¿Dar entrada MANUAL sin etiqueta?')) return;
   }
   if (movTipo==='E') { item.entradas+=qty; item.actual+=qty; }
   else if (movTipo==='S') { item.salidas+=qty; item.actual-=qty; }
@@ -1999,6 +2004,8 @@ async function doMovInner() {
   if (!item.historial) item.historial=[];
   item.historial.push(hItem);
   const mov = {tipo:movTipo,pn:item.pn,desc:item.desc,familia:item.familia,qty,fecha:new Date().toISOString(),user:user.name,ref,stock:item.actual,loc:item.ubicacion};
+  if (palletInfo) { mov.origen='LINEA'; mov.pallet=palletInfo.id; mov.maq=palletInfo.maq; }
+  else if (movTipo==='E' && /^GH69/i.test(item.pn||'')) { mov.origen='MANUAL'; }
   movs.unshift(mov);
   saveLocal();
   await pushMov(mov);
@@ -2249,6 +2256,21 @@ async function aplicarPallet(parts){
       if(p.status==='RECEIVED') toast('⚠️ Pallet '+id+' YA fue recibido ('+(p.recibidoEn||'')+')','err');
       else if(p.status==='VOID') toast('⚠️ Pallet '+id+' está ANULADO','err');
       else if(p.destino&&p.destino!==PALLET_DEST) toast('⚠️ Este pallet es para '+p.destino,'err');
+      else if(p.status!=='RECEIVED'){
+        // ¿Ya se dio entrada manual a este pallet (misma parte y cantidad, sin etiqueta)? Ligarlo SIN sumar otra vez
+        const pnS=String(parts[0]||'').trim().toUpperCase();
+        const cand=(typeof movs!=='undefined'?movs:[]).find(m=>(m.tipo==='E'||m.tipo==='IN') && String(m.pn||'').trim().toUpperCase()===pnS && Number(m.qty)===q && !(m.ref||m.referencia) && (Date.now()-new Date(m.fecha).getTime())<3*864e5);
+        if(cand && confirm('Ya existe una entrada MANUAL de '+q.toLocaleString()+' pzas de '+pnS+' ('+new Date(cand.fecha).toLocaleString()+') sin etiqueta.\n\n¿Ligar este pallet '+id+' a esa entrada SIN sumar de nuevo?\n(Aceptar = ligar sin sumar · Cancelar = dar entrada nueva)')){
+          const qs=await db.collection('planta4_movimientos').where('fecha','==',cand.fecha).where('pn','==',cand.pn).limit(1).get();
+          if(!qs.empty) await qs.docs[0].ref.update({ref:id,origen:'LINEA',pallet:id,maq:p.maquina||''});
+          await db.collection('pallets_medio').doc(id).update({status:'RECEIVED',recibidoEn:'P4',recibidoPor:(user&&user.name)||'',recibidoFecha:new Date().toISOString(),vinculadoManual:true});
+          cand.ref=id; cand.origen='LINEA'; cand.pallet=id; cand.maq=p.maquina||'';
+          scanPallet=null; selIdx=null;
+          try{ document.getElementById('movForm').className='mf'; document.getElementById('mfRef').value=''; }catch(e){}
+          try{ saveLocal(); renderHist(); }catch(e){}
+          toast('✅ Pallet '+id+' ligado a la entrada existente (sin sumar de nuevo)','ok');
+        }
+      }
     }
   }catch(e){}
 }
@@ -2321,11 +2343,14 @@ function movHTML(m) {
   const loc = m.loc || m.ubicacion || '–';
   const usr = m.user || m.usuario || '';
   const ref = m.ref || m.referencia || '';
+  let badge='';
+  if (m.origen==='LINEA') badge=' · <span style="color:var(--green)">📦 Etiqueta de línea'+(m.maq?' '+m.maq:'')+' · '+(m.pallet||'')+'</span>';
+  else if (tipoNorm==='E' && /^GH69/i.test(m.pn||'') && !ref) badge=' · <span style="color:var(--red)">⚠️ sin etiqueta de línea</span>';
   const icons={E:'⬇️',S:'⬆️',T:'🔀',INI:'🏁'};
   const cols={E:'mb-E',S:'mb-S',T:'mb-T',INI:'mb-T'};
   const qc={E:'color:var(--green)',S:'color:var(--red)',T:'color:var(--accent)'};
   const signs={E:'+',S:'-',T:'→'};
-  return '<div class="mc"><div class="mb '+(cols[tipoNorm]||'mb-T')+'">'+(icons[tipoNorm]||'🔄')+'</div><div style="flex:1;min-width:0"><div class="mc-t">'+(m.pn||'–')+'</div><div class="mc-d">'+(m.desc||'')+' · '+(m.familia||'')+' · '+usr+'</div><div class="mc-l">📍 '+loc+' · '+fmtDate(m.fecha)+(ref?' · '+ref:'')+'</div></div><div class="mc-q" style="'+(qc[tipoNorm]||'')+'">'+(signs[tipoNorm]||'')+qty+'</div></div>';
+  return '<div class="mc"><div class="mb '+(cols[tipoNorm]||'mb-T')+'">'+(icons[tipoNorm]||'🔄')+'</div><div style="flex:1;min-width:0"><div class="mc-t">'+(m.pn||'–')+'</div><div class="mc-d">'+(m.desc||'')+' · '+(m.familia||'')+' · '+usr+'</div><div class="mc-l">📍 '+loc+' · '+fmtDate(m.fecha)+(ref?' · '+ref:'')+badge+'</div></div><div class="mc-q" style="'+(qc[tipoNorm]||'')+'">'+(signs[tipoNorm]||'')+qty+'</div></div>';
 }
 
 // Exporta el historial (Historial > Excel) respetando el filtro de tipo y la búsqueda actuales
