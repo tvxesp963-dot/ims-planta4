@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -11,7 +11,7 @@
 /* ===== CONTROL DE VERSION (evita que celulares/laptops se queden con version vieja en cache) =====
    Cada vez que subas un index.html actualizado, cambia este numero (ej: 20260711).
    El sistema detecta el cambio y recarga automaticamente la version nueva. */
-var APP_VERSION = "20260907a";
+var APP_VERSION = "20261002a";
 (function(){
   try{
     var key = 'ims_p4_version';
@@ -733,13 +733,27 @@ const MASTER_EMAIL = 'tvxesp963@gmail.com'; // único usuario que puede editar P
 function isMaster() { return !!(user && (user.email||'').toLowerCase() === MASTER_EMAIL); }
 
 function saveLocal() {
-  localStorage.setItem('ims4_items', JSON.stringify(items));
-  localStorage.setItem('ims4_movs', JSON.stringify(movs));
+  try {
+    localStorage.setItem('ims4_items', JSON.stringify(items));
+    localStorage.setItem('ims4_movs', JSON.stringify(movs));
+  } catch(e) { console.warn('saveLocal:', e); }
+}
+function _withTimeout(p, ms) {
+  return Promise.race([p, new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('Firebase no respondió (revisa internet/permisos)')); }, ms||8000); })]);
+}
+
+function _findEditIdx() {
+  var it = window._editItem;
+  if (!it) return window._editIdx;
+  var id = it._docId || getDocId(it.pn, it.desc);
+  var p = items.findIndex(function(x){ return (x._docId || getDocId(x.pn, x.desc)) === id; });
+  return p >= 0 ? p : window._editIdx;
 }
 
 function openEdit(idx) {
   if (!user || (user.role !== 'admin' && user.role !== 'operador')) { toast('Sin permiso','err'); return; }
   window._editIdx = idx;
+  window._editItem = items[idx];
   const i = items[idx];
   document.getElementById('editPN').value = i.pn || '';
   document.getElementById('editDesc').value = i.desc || '';
@@ -797,8 +811,17 @@ function closeEdit() { document.getElementById('modalEdit').style.display = 'non
 window.closeEdit = closeEdit;
 
 async function saveEdit() {
-  const idx = window._editIdx;
-  if (idx === undefined || idx === null) return;
+  try {
+    toast('Guardando...', 'info');
+    await _saveEditCore();
+  } catch(e) {
+    console.error('saveEdit:', e);
+    toast('❌ Error al guardar: ' + (e && e.message ? e.message : e), 'err');
+  }
+}
+async function _saveEditCore() {
+  const idx = _findEditIdx();
+  if (idx === undefined || idx === null || !items[idx]) { toast('❌ No se encontró la parte. Cierra y vuelve a abrir Editar', 'err'); return; }
   const oldItemRef = items[idx];
   const esMaster = isMaster();
   // Para todos los demás usuarios, PN, descripción, familia, inventario y precio son de solo
@@ -808,10 +831,10 @@ async function saveEdit() {
   // desde este mismo modal, igual que antes existía.
   const newPN = esMaster
     ? (document.getElementById('editPN').value || '').trim().toUpperCase()
-    : (oldItemRef.pn || '').trim().toUpperCase();
+    : (oldItemRef.pn || '');
   const newDesc = esMaster
     ? (document.getElementById('editDesc').value || '').trim().toUpperCase()
-    : (oldItemRef.desc || '').trim().toUpperCase();
+    : (oldItemRef.desc || '');
   const newFam = esMaster
     ? (document.getElementById('editFam').value || 'Otro')
     : (oldItemRef.familia || 'Otro');
@@ -869,15 +892,16 @@ async function saveEdit() {
   saveLocal();
   if (db) {
     try {
-      const oldDocId = getDocId(oldItem.pn, oldItem.desc);
-      const newDocId = getDocId(newPN, newDesc);
+      const oldDocId = oldItem._docId || getDocId(oldItem.pn, oldItem.desc);
+      const sameKey = (oldItem.pn||'') === newPN && (oldItem.desc||'') === newDesc;
+      const newDocId = sameKey ? oldDocId : getDocId(newPN, newDesc);
       if (oldDocId !== newDocId) {
-        await db.collection('planta4_inventario').doc(oldDocId).delete();
+        await _withTimeout(db.collection('planta4_inventario').doc(oldDocId).delete());
       }
       // Quitar _docId antes de guardar (es campo interno)
       var dataGuardar = Object.assign({}, items[idx]);
       delete dataGuardar._docId;
-      await db.collection('planta4_inventario').doc(newDocId).set(dataGuardar, {merge:true});
+      await _withTimeout(db.collection('planta4_inventario').doc(newDocId).set(dataGuardar, {merge:true}));
       items[idx]._docId = newDocId;
     } catch(e) { console.error('saveEdit Firestore:', e); toast('Local OK. Firebase: '+e.message, 'warn'); }
   }
@@ -889,7 +913,7 @@ async function saveEdit() {
 window.saveEdit = saveEdit;
 
 async function deleteFromEdit() {
-  const idx = window._editIdx;
+  const idx = _findEditIdx();
   if (idx === undefined || idx === null) return;
   if (!user || user.role !== 'admin') { toast('Solo admin puede eliminar','err'); return; }
   const it = items[idx];
@@ -902,11 +926,16 @@ async function deleteFromEdit() {
 
   try {
     var docId = it._docId || getDocId(it.pn, it.desc);
-    // Borrar item
-    if (db) await db.collection('planta4_inventario').doc(docId).delete();
-    // Borrar movimientos asociados
+    // Borrar SOLO este documento
+    if (db) await _withTimeout(db.collection('planta4_inventario').doc(docId).delete());
+    // Si queda otro renglón con el mismo PN+Desc (duplicado), NO se tocan los movimientos
+    var quedaOtro = items.some(function(x){
+      return x !== it && (x._docId || getDocId(x.pn,x.desc)) !== docId &&
+        (x.pn||'').toUpperCase() === (it.pn||'').toUpperCase() &&
+        (x.desc||'').toUpperCase() === (it.desc||'').toUpperCase();
+    });
     var bm = 0;
-    if (db) {
+    if (db && !quedaOtro) {
       var snap = await db.collection('planta4_movimientos').get();
       for (var k = 0; k < snap.docs.length; k++) {
         var d = snap.docs[k];
@@ -919,8 +948,9 @@ async function deleteFromEdit() {
       }
     }
     // Borrar local
-    items.splice(idx, 1);
-    movs = movs.filter(function(m){
+    var pos = items.findIndex(function(x){ return (x._docId || getDocId(x.pn,x.desc)) === docId; });
+    if (pos >= 0) items.splice(pos, 1);
+    if (!quedaOtro) movs = movs.filter(function(m){
       return !((m.pn||'').toUpperCase()===(it.pn||'').toUpperCase() &&
                (m.desc||'').toUpperCase()===(it.desc||'').toUpperCase());
     });
@@ -961,7 +991,7 @@ async function loadFromFirestore() {
     const snap = await db.collection('planta4_inventario').get();
     if (snap.empty) return;
     const firestoreItems = [];
-    snap.forEach(d => firestoreItems.push(d.data()));
+    snap.forEach(d => { const x = d.data(); x._docId = d.id; firestoreItems.push(x); });
     if (firestoreItems.length > 0) {
       const masterOnly = items.filter(i => !firestoreItems.find(fi => fi.pn === i.pn && fi.desc === i.desc));
       items = [...firestoreItems, ...masterOnly];
@@ -988,7 +1018,8 @@ function startSync() {
         const fi = change.doc.data();
         const docId = change.doc.id;
         // Identificar por docId si ya viene marcado, o por pn+desc como fallback
-        let idx = items.findIndex(i => (i._docId && i._docId === docId) || (i.pn === fi.pn && i.desc === fi.desc));
+        let idx = items.findIndex(i => i._docId === docId);
+        if (idx < 0) idx = items.findIndex(i => !i._docId && getDocId(i.pn, i.desc) === docId);
         if (change.type === 'removed') {
           if (idx >= 0) items.splice(idx, 1);
         } else {
@@ -1035,7 +1066,8 @@ async function pushMov(mov) {
       toast('⚠️ No se encontró la parte exacta (' + mov.pn + ') — el movimiento se registró en historial pero el stock NO se actualizó. Revísalo manualmente.', 'err');
       return;
     }
-    await db.collection('planta4_inventario').doc(getDocId(mov.pn,movItem.desc)).set(movItem, {merge:true});
+    var _d = Object.assign({}, movItem); var _id = _d._docId || getDocId(mov.pn,movItem.desc); delete _d._docId;
+    await db.collection('planta4_inventario').doc(_id).set(_d, {merge:true});
   } catch(e) {}
 }
 
@@ -1923,7 +1955,29 @@ function selForMov(idx) {
 
 function adjQ(d) { const inp=document.getElementById('mfQty'); inp.value=Math.max(1,(parseInt(inp.value)||0)+d); }
 
-async function doMov() {
+var _movBusy=false;
+async function doMov(){ if(_movBusy) return; _movBusy=true; try{ await doMovInner(); } finally { _movBusy=false; } }
+// Reclama el pallet de forma atómica: solo UNA persona/escaneo puede pasarlo de PENDING a RECEIVED
+async function reclamarPallet(){
+  if(!scanPallet) return {ok:true};
+  const ref=db.collection('pallets_medio').doc(scanPallet.id);
+  const por=(user&&user.name)||'', ahora=new Date().toISOString();
+  try{
+    return await db.runTransaction(async tx=>{
+      const d=await tx.get(ref);
+      if(d.exists){
+        const st=d.data().status;
+        if(st==='RECEIVED') return {ok:false,msg:'Pallet '+scanPallet.id+' YA fue escaneado'+(d.data().recibidoFecha?' el '+new Date(d.data().recibidoFecha).toLocaleString():'')+(d.data().recibidoPor?' por '+d.data().recibidoPor:'')+' — no se registra de nuevo'};
+        if(st==='VOID') return {ok:false,msg:'Pallet '+scanPallet.id+' está ANULADO — no se puede recibir'};
+        tx.update(ref,{status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora});
+      } else {
+        tx.set(ref,{status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora,creadoDesdeIMS:true});
+      }
+      return {ok:true};
+    });
+  }catch(e){ return {ok:false,msg:'No se pudo verificar el pallet (red o permiso): '+e.message}; }
+}
+async function doMovInner() {
   if (user && user.role === 'viewer') { toast('Solo lectura — sin permisos para movimientos','err'); return; }
   if (selIdx===null) { toast('Selecciona un Part Number','err'); return; }
   const qty = parseInt(document.getElementById('mfQty').value)||0;
@@ -1932,6 +1986,11 @@ async function doMov() {
   if (movTipo==='S'&&qty>item.actual) { toast('Stock insuficiente: '+item.actual.toLocaleString()+' disponibles','err'); return; }
   const dest = document.getElementById('mfDest').value;
   const ref = document.getElementById('mfRef').value.trim();
+  if (scanPallet && movTipo==='E' && ref.toUpperCase()===scanPallet.id.toUpperCase()) {
+    const rc = await reclamarPallet();
+    if (!rc.ok) { toast('⚠️ '+rc.msg,'err'); scanPallet=null; document.getElementById('mfRef').value=''; return; }
+    scanPallet=null; // ya reclamado: no volver a marcarlo después
+  }
   if (movTipo==='E') { item.entradas+=qty; item.actual+=qty; }
   else if (movTipo==='S') { item.salidas+=qty; item.actual-=qty; }
   else { item.salidas+=qty; item.actual-=qty; }
@@ -1943,6 +2002,7 @@ async function doMov() {
   movs.unshift(mov);
   saveLocal();
   await pushMov(mov);
+  if (movTipo==='E') await marcarPalletRecibido(ref);
   updateDash(); renderInv(); renderHist(); renderLocMap();
   const lbl = {E:'✅ Entrada',S:'📤 Salida',T:'🔀 Traslado'};
   toast(lbl[movTipo]+': '+qty.toLocaleString()+' pzas · '+item.pn,'ok');
@@ -2172,33 +2232,63 @@ function processInvQRScan(text){
 window.startInvScan=startInvScan;
 window.stopInvScan=stopInvScan;
 
+// ── PALLET DE LÍNEA (QR con cantidad e ID: PN|DESC|FAMILIA|CANTIDAD|ID-PALLET) ──
+var scanPallet=null;
+var PALLET_DEST='IMS P4';
+async function aplicarPallet(parts){
+  scanPallet=null;
+  var q=parseInt(parts[3]), id=(parts[4]||'').trim();
+  if(!id||!(q>0)) return;
+  scanPallet={id:id,qty:q};
+  document.getElementById('mfQty').value=q;
+  document.getElementById('mfRef').value=id.toUpperCase();
+  try{
+    var d=await db.collection('pallets_medio').doc(id).get();
+    if(d.exists){
+      var p=d.data();
+      if(p.status==='RECEIVED') toast('⚠️ Pallet '+id+' YA fue recibido ('+(p.recibidoEn||'')+')','err');
+      else if(p.status==='VOID') toast('⚠️ Pallet '+id+' está ANULADO','err');
+      else if(p.destino&&p.destino!==PALLET_DEST) toast('⚠️ Este pallet es para '+p.destino,'err');
+    }
+  }catch(e){}
+}
+async function marcarPalletRecibido(ref){
+  if(!scanPallet||!ref||ref.toUpperCase()!==scanPallet.id.toUpperCase()) return;
+  try{
+    await db.collection('pallets_medio').doc(scanPallet.id).update({status:'RECEIVED',recibidoEn:'P4',recibidoPor:(user&&user.name)||'',recibidoFecha:new Date().toISOString()});
+  }catch(e){ toast('Entrada guardada, pero no se marcó el pallet: '+e.message,'err'); }
+  scanPallet=null;
+}
 function processQRScan(text){
+  scanPallet=null;
   const parts=text.split('|');
   const pn=(parts[0]||text).trim();
   const desc=(parts[1]||'').trim();
-  // Si el QR tiene descripción, buscar por PN + descripción exacta primero
+  // Si el QR tiene descripción, buscar por PN + descripción exacta primero (sin importar mayúsculas/espacios)
+  const nP=x=>String(x||'').trim().toUpperCase().replace(/\s+/g,'');
   let idx=-1;
   if(desc){
-    idx=items.findIndex(i=>i.pn===pn && i.desc.toUpperCase()===desc.toUpperCase());
+    idx=items.findIndex(i=>nP(i.pn)===nP(pn) && String(i.desc||'').trim().toUpperCase()===desc.toUpperCase());
   }
   // Si no encontró con desc, buscar solo por PN (QR viejo sin desc)
   if(idx<0){
-    idx=items.findIndex(i=>i.pn===pn);
+    idx=items.findIndex(i=>nP(i.pn)===nP(pn));
   }
   if(idx>=0){
     if(!movTipo) initMov('E');
-    selForMov(idx);
+    selForMov(idx); aplicarPallet(parts);
     toast('✅ '+items[idx].pn+' · '+items[idx].desc+' encontrado','ok');
   } else {
     const idx2=items.findIndex(i=>i.pn.includes(pn)||pn.includes(i.pn));
     if(idx2>=0){
       if(!movTipo) initMov('E');
-      selForMov(idx2);
+      selForMov(idx2); aplicarPallet(parts);
       toast('✅ '+items[idx2].pn+' · '+items[idx2].desc+' encontrado','ok');
     } else {
       document.getElementById('movS').value=pn;
       renderMovList();
-      toast('🔍 '+pn+' — selecciona de la lista','info');
+      if(parts.length>=5) toast('❌ La parte '+pn+' no existe en el IMS P4 — dala de alta antes de recibir el pallet','err');
+      else toast('🔍 '+pn+' — selecciona de la lista','info');
     }
   }
 }
