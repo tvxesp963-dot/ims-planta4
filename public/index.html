@@ -2012,8 +2012,8 @@ async function doMovInner() {
     if (!rc.ok) { limpiarFormMov(); alert('⚠️ '+rc.msg); return; }
     palletInfo = {id:scanPallet.id, maq:rc.maq||''};
     scanPallet=null; // ya reclamado: no volver a marcarlo después
-  } else if (movTipo==='E' && await esPiezaDeLinea(item.pn)) {
-    const okClave = await pedirClaveManual(item.pn, qty);
+  } else if ((movTipo==='E' || movTipo==='S') && await esPiezaDeLinea(item.pn)) {
+    const okClave = await pedirClaveManual(item.pn, qty, movTipo);
     if (!okClave) return;
     claveManualOk = true;
   }
@@ -2026,7 +2026,7 @@ async function doMovInner() {
   item.historial.push(hItem);
   const mov = {tipo:movTipo,pn:item.pn,desc:item.desc,familia:item.familia,qty,fecha:new Date().toISOString(),user:user.name,ref,stock:item.actual,loc:item.ubicacion};
   if (palletInfo) { mov.origen='LINEA'; mov.pallet=palletInfo.id; mov.maq=palletInfo.maq; }
-  else if (movTipo==='E' && claveManualOk) { mov.origen='MANUAL'; if (claveManualOk) mov.autorizado=true; }
+  else if (claveManualOk) { mov.origen='MANUAL'; mov.autorizado=true; }
   movs.unshift(mov);
   saveLocal();
   await pushMov(mov);
@@ -2319,18 +2319,19 @@ async function esPiezaDeLinea(pn){
    Para cambiar la contraseña, edita solo la línea de abajo. */
 const CLAVE_ENTRADA_MANUAL = 'P4-Autoriza-2026';
 const TXT_CLAVE = {
-  es:{t:'🔒 Entrada manual bloqueada',m:(pn,q)=>'La parte '+pn+' ('+q.toLocaleString()+' pzs) viene de línea y no tiene etiqueta escaneada. Lo correcto es escanear la etiqueta del pallet. Si es un caso especial, pide autorización e ingresa la contraseña.',ph:'Contraseña de autorización',ok:'Autorizar',cancel:'Cancelar',bad:'Contraseña incorrecta'},
-  en:{t:'🔒 Manual entry locked',m:(pn,q)=>'Part '+pn+' ('+q.toLocaleString()+' pcs) comes from the line and its label was not scanned. The correct way is to scan the pallet label. For a special case, ask for authorization and enter the password.',ph:'Authorization password',ok:'Authorize',cancel:'Cancel',bad:'Wrong password'},
-  ko:{t:'🔒 수동 입고 잠김',m:(pn,q)=>'부품 '+pn+' ('+q.toLocaleString()+' pcs)은(는) 라인에서 온 것이며 라벨이 스캔되지 않았습니다. 팔레트 라벨을 스캔하는 것이 올바른 방법입니다. 예외 상황이면 승인을 받고 비밀번호를 입력하세요.',ph:'승인 비밀번호',ok:'승인',cancel:'취소',bad:'비밀번호가 틀렸습니다'}
+  es:{tS:'🔒 Salida manual bloqueada',mS:(pn,q)=>'La parte '+pn+' ('+q.toLocaleString()+' pzs) viene de línea. Descontarla a mano requiere autorización. Ingresa la contraseña.',t:'🔒 Entrada manual bloqueada',m:(pn,q)=>'La parte '+pn+' ('+q.toLocaleString()+' pzs) viene de línea y no tiene etiqueta escaneada. Lo correcto es escanear la etiqueta del pallet. Si es un caso especial, pide autorización e ingresa la contraseña.',ph:'Contraseña de autorización',ok:'Autorizar',cancel:'Cancelar',bad:'Contraseña incorrecta'},
+  en:{tS:'🔒 Manual removal locked',mS:(pn,q)=>'Part '+pn+' ('+q.toLocaleString()+' pcs) comes from the line. Deducting it by hand requires authorization. Enter the password.',t:'🔒 Manual entry locked',m:(pn,q)=>'Part '+pn+' ('+q.toLocaleString()+' pcs) comes from the line and its label was not scanned. The correct way is to scan the pallet label. For a special case, ask for authorization and enter the password.',ph:'Authorization password',ok:'Authorize',cancel:'Cancel',bad:'Wrong password'},
+  ko:{tS:'🔒 수동 출고 잠김',mS:(pn,q)=>'부품 '+pn+' ('+q.toLocaleString()+' pcs)은(는) 라인에서 온 것입니다. 수동 차감은 승인이 필요합니다. 비밀번호를 입력하세요.',t:'🔒 수동 입고 잠김',m:(pn,q)=>'부품 '+pn+' ('+q.toLocaleString()+' pcs)은(는) 라인에서 온 것이며 라벨이 스캔되지 않았습니다. 팔레트 라벨을 스캔하는 것이 올바른 방법입니다. 예외 상황이면 승인을 받고 비밀번호를 입력하세요.',ph:'승인 비밀번호',ok:'승인',cancel:'취소',bad:'비밀번호가 틀렸습니다'}
 };
-function pedirClaveManual(pn, qty){
+function pedirClaveManual(pn, qty, tipo){
   return new Promise(function(resolve){
     const L = TXT_CLAVE[IMS_LANG] || TXT_CLAVE.es;
+    const esS = (tipo==='S');
     const ov = document.createElement('div');
     ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
     ov.innerHTML = '<div style="background:#171a23;border:1px solid #f5a623;border-radius:14px;padding:20px;max-width:380px;width:100%;color:#e8eaf0;font-family:inherit">'
-      + '<div style="font-size:17px;font-weight:700;margin-bottom:8px">'+L.t+'</div>'
-      + '<div style="font-size:13px;color:#aab;margin-bottom:12px;line-height:1.4">'+L.m(pn,qty)+'</div>'
+      + '<div style="font-size:17px;font-weight:700;margin-bottom:8px">'+(esS?L.tS:L.t)+'</div>'
+      + '<div style="font-size:13px;color:#aab;margin-bottom:12px;line-height:1.4">'+(esS?L.mS(pn,qty):L.m(pn,qty))+'</div>'
       + '<input id="claveManualIn" type="password" autocomplete="off" placeholder="'+L.ph+'" style="width:100%;box-sizing:border-box;padding:11px;border-radius:8px;border:1px solid #3a4054;background:#0f1117;color:#fff;font-size:15px">'
       + '<div id="claveManualErr" style="color:#ff6b6b;font-size:12px;min-height:16px;margin-top:6px"></div>'
       + '<div style="display:flex;gap:8px;margin-top:8px"><button id="claveManualNo" style="flex:1;padding:11px;border-radius:8px;border:1px solid #3a4054;background:transparent;color:#e8eaf0;cursor:pointer">'+L.cancel+'</button>'
