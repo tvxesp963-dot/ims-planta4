@@ -11,7 +11,7 @@
 /* ===== CONTROL DE VERSION (evita que celulares/laptops se queden con version vieja en cache) =====
    Cada vez que subas un index.html actualizado, cambia este numero (ej: 20260711).
    El sistema detecta el cambio y recarga automaticamente la version nueva. */
-var APP_VERSION = "20261008b";
+var APP_VERSION = "20261008d";
 (function(){
   try{
     var key = 'ims_p4_version';
@@ -30,6 +30,7 @@ var APP_VERSION = "20261008b";
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap');
 :root{--bg:#080c18;--bg2:#0e1325;--bg3:#141929;--bg4:#1c2238;--accent:#4da6ff;--accent2:#1a6fd4;--accent3:#0d4a99;--green:#00e676;--green2:#00b85a;--red:#ff4444;--amber:#ffb300;--cyan:#00e5ff;--text:#dde3f5;--text2:#7a88b8;--text3:#3d4d77;--border:#1e2a4a;--border2:#263558;}
@@ -2551,7 +2552,7 @@ window.exportHistExcel = exportHistExcel;
 
 // ══ REPORTE DE INVENTARIO POR CORREO (mensual · primer día hábil) ══
 // Destinatarios y candado mensual guardados en ims_config/reporte_inv_p4. Solo LEE el inventario.
-var REPINV_DOC='reporte_inv_p4', REPINV_NOMBRE='IMS Planta 4', REPINV_UNIDAD='pzas', REPINV_VALOR=true, REPINV_EDIF=false, REPINV_PALLET=false;
+var REPINV_DOC='reporte_inv_p4', REPINV_NOMBRE='IMS Plant 4', REPINV_UNIDAD='pzas', REPINV_VALOR=true, REPINV_EDIF=false, REPINV_PALLET=false;
 var REPINV_URL='https://script.google.com/macros/s/AKfycbxGagIlCTeJAb5rfZvBSYoZOJqEFuXqvfNqWf_Po9L0fM7lteDY0GvyFFF97VuWbpE/exec', REPINV_CLAVE='tavox2026';
 var REPINV_HORA={h:16,m:35};
 var REPINV_DEST=[], REPINV_USERS=[], REPINV_BUSY=false, REPINV_INTENTOS=0, REPINV_TIMER=null;
@@ -2559,7 +2560,7 @@ var REPINV_TXT={
   es:{titulo:'📦 Status de Inventario',pns:'Números de parte',total:'Existencia total',pzas:'Total en piezas',valor:'Valor total (USD)',cero:'Partes en cero',bajo:'Bajo stock mínimo',
       fam:'POR FAMILIA',edif:'POR UBICACIÓN',detCero:'Partes en CERO',detBajo:'Partes BAJO MÍNIMO',mas:'... y {n} más',ok:'✅ Sin partes bajo mínimo',
       ex:'exist',min:'mín',sinDest:'Marca al menos un correo primero',enviando:'⏳ Enviando reporte...',enviado:'✅ Reporte enviado a {n} correo(s)',err:'Error: ',sinEjs:'EmailJS no cargó, revisa tu internet'},
-  en:{titulo:'📦 Inventory Status',pns:'Part numbers',total:'Total on hand',pzas:'Total pieces',valor:'Total value (USD)',cero:'Parts at zero',bajo:'Below minimum stock',
+  en:{titulo:'Inventory Status Report',pns:'Part numbers',total:'Total on hand',pzas:'Total pieces',valor:'Total value (USD)',cero:'Parts at zero',bajo:'Below minimum stock',
       fam:'BY FAMILY',edif:'BY LOCATION',detCero:'Parts at ZERO',detBajo:'Parts BELOW MINIMUM',mas:'... and {n} more',ok:'✅ No parts below minimum',
       ex:'on hand',min:'min',sinDest:'Check at least one email first',enviando:'⏳ Sending report...',enviado:'✅ Report sent to {n} email(s)',err:'Error: ',sinEjs:'EmailJS did not load, check your internet'},
   ko:{titulo:'📦 재고 현황',pns:'부품 번호',total:'총 재고',pzas:'총 수량(개)',valor:'총 금액 (USD)',cero:'재고 0 부품',bajo:'최소 재고 미달',
@@ -2567,6 +2568,7 @@ var REPINV_TXT={
       ex:'재고',min:'최소',sinDest:'먼저 이메일을 하나 이상 선택하세요',enviando:'⏳ 보고서 전송 중...',enviado:'✅ 보고서가 {n}개 이메일로 전송되었습니다',err:'오류: ',sinEjs:'EmailJS를 불러오지 못했습니다. 인터넷을 확인하세요'}
 };
 function repInvT(k){ var l=(typeof IMS_LANG!=='undefined'&&REPINV_TXT[IMS_LANG])?IMS_LANG:'es'; return REPINV_TXT[l][k]; }
+function repInvE(k){ return REPINV_TXT.en[k]; } // el correo y el Excel siempre van en inglés
 function repInvN(v){ return parseFloat(v)||0; }
 function repInvFmt(n){ return Math.round(n*100)/100; }
 
@@ -2637,57 +2639,169 @@ function repInvListaMonitor(){
   return {lim:lim,lista:lista};
 }
 
-function repInvBuild(){
-  var hoy=new Date();
-  var loc=(typeof IMS_LANG!=='undefined'&&IMS_LANG==='ko')?'ko-KR':((typeof IMS_LANG!=='undefined'&&IMS_LANG==='en')?'en-US':'es-MX');
-  var fechaStr=hoy.toLocaleDateString(loc,{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  var titulo=repInvT('titulo')+' — '+REPINV_NOMBRE+' — '+fechaStr;
-  var total=0, valor=0, pzasTot=0, ceros=[], fams={}, edifs={}, pnSet={};
+// ── Datos del reporte (siempre en inglés) ──
+function repInvData(){
+  var mult=function(i){ return REPINV_PALLET?repInvN(i.pzasPallet):1; };
+  var D={rows:[],fams:{},edifs:{},tot:0,pzas:0,val:0,ceros:[],bajos:[]};
   items.forEach(function(i){
-    var a=repInvN(i.actual), pr=repInvN(i.precio), mult=REPINV_PALLET?repInvN(i.pzasPallet):1;
-    total+=a; pzasTot+=a*mult; valor+=a*mult*pr; pnSet[i.pn]=1;
-    var f=i.familia||'—'; if(!fams[f]) fams[f]={pns:0,tot:0,val:0}; fams[f].pns++; fams[f].tot+=a; fams[f].val+=a*mult*pr;
-    if(REPINV_EDIF){ var u=i.ubicacion||'—'; if(!edifs[u]) edifs[u]={pns:0,tot:0}; edifs[u].pns++; edifs[u].tot+=a; }
-    if(a<=0) ceros.push(i);
+    var a=repInvN(i.actual), v=a*mult(i)*repInvN(i.precio);
+    D.rows.push({i:i,a:a,v:v});
+    D.tot+=a; D.pzas+=a*mult(i); D.val+=v;
+    var f=i.familia||'—'; if(!D.fams[f]) D.fams[f]={pns:0,tot:0,val:0}; D.fams[f].pns++; D.fams[f].tot+=a; D.fams[f].val+=v;
+    if(REPINV_EDIF){ var u=i.ubicacion||'—'; if(!D.edifs[u]) D.edifs[u]={pns:0,tot:0,val:0}; D.edifs[u].pns++; D.edifs[u].tot+=a; D.edifs[u].val+=v; }
+    if(a<=0) D.ceros.push(i);
   });
-  var mon=repInvListaMonitor();
-  var bajos=mon.lista.filter(function(x){return x.stock>0 && x.stock<mon.lim;});
-  var LIM=15, L='\n';
-  var c=titulo+L+'='.repeat(50)+L+L+'■ '+REPINV_NOMBRE+L;
-  c+='  • '+repInvT('pns')+': '+(REPINV_PALLET?Object.keys(pnSet).length:items.length).toLocaleString()+L;
-  c+='  • '+repInvT('total')+': '+repInvFmt(total).toLocaleString()+' '+REPINV_UNIDAD+L;
-  if(REPINV_PALLET) c+='  • '+repInvT('pzas')+': '+Math.round(pzasTot).toLocaleString()+' pzas'+L;
-  if(REPINV_VALOR) c+='  • '+repInvT('valor')+': $'+Math.round(valor).toLocaleString()+L;
-  c+='  • '+repInvT('cero')+': '+ceros.length+L;
-  c+='  • '+repInvT('bajo')+' (<'+mon.lim.toLocaleString()+' '+REPINV_UNIDAD+'): '+bajos.length+L;
-  c+=L+repInvT('fam')+':'+L;
-  Object.keys(fams).sort().forEach(function(k){
-    c+='  - '+k+': '+fams[k].pns+' PN · '+repInvFmt(fams[k].tot).toLocaleString()+' '+REPINV_UNIDAD+(REPINV_VALOR?' · $'+Math.round(fams[k].val).toLocaleString():'')+L;
+  D.mon=repInvListaMonitor();
+  D.bajos=D.mon.lista.filter(function(x){return x.stock>0&&x.stock<D.mon.lim;});
+  D.top=D.rows.slice().sort(function(a,b){return b.v-a.v;}).slice(0,10);
+  D.fecha=new Date();
+  D.fechaLarga=D.fecha.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  D.fechaISO=D.fecha.toISOString().split('T')[0];
+  return D;
+}
+function repInvMoney(n){ return '$'+Math.round(n).toLocaleString('en-US'); }
+function repInvNum(n){ return (Math.round(n*100)/100).toLocaleString('en-US'); }
+function repInvEsc(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Cuerpo del correo: texto plano (respaldo) + HTML ejecutivo ──
+function repInvBuild(){
+  var D=repInvData(), L='\n', LIM=15;
+  var titulo=REPINV_NOMBRE+' — Inventory Status Report — '+D.fechaLarga;
+  var c=titulo+L+'='.repeat(50)+L+L;
+  c+='Part numbers: '+D.rows.length.toLocaleString()+L+'Total on hand: '+repInvNum(D.tot)+' '+REPINV_UNIDAD+L;
+  if(REPINV_PALLET) c+='Total pieces: '+Math.round(D.pzas).toLocaleString()+L;
+  c+='Total inventory value (USD): '+repInvMoney(D.val)+L+'Parts at zero: '+D.ceros.length+L+'Below minimum stock: '+D.bajos.length+L+L+'See the attached Excel for the full detail.'+L;
+  return {titulo:titulo,cuerpo:c,html:repInvHtml(D,titulo)};
+}
+function repInvHtml(D,titulo){
+  var NAVY='#1F3864', LINE='#D9DEE7', SOFT='#F4F6FA', RED='#B42318', AMB='#B54708', GRN='#067647';
+  var th='style="background:'+NAVY+';color:#fff;padding:8px 10px;font-size:12px;text-align:left;font-weight:600"';
+  var thr='style="background:'+NAVY+';color:#fff;padding:8px 10px;font-size:12px;text-align:right;font-weight:600"';
+  function td(t,r,b){ return '<td style="padding:7px 10px;font-size:12px;border-bottom:1px solid '+LINE+';text-align:'+(r?'right':'left')+(b?';font-weight:700;background:'+SOFT:'')+'">'+t+'</td>'; }
+  function h2(t){ return '<div style="font-size:14px;font-weight:700;color:'+NAVY+';margin:24px 0 8px;padding-bottom:4px;border-bottom:2px solid '+NAVY+'">'+t+'</div>'; }
+  function kpi(l,v,col){ return '<td width="20%" style="padding:12px 8px;text-align:center;background:'+SOFT+';border:1px solid '+LINE+'"><div style="font-size:11px;color:#667085;text-transform:uppercase;letter-spacing:.4px">'+l+'</div><div style="font-size:20px;font-weight:700;color:'+(col||NAVY)+';margin-top:4px">'+v+'</div></td>'; }
+  var h='<div style="background:#EEF1F6;padding:20px 0;font-family:Arial,Helvetica,sans-serif"><table align="center" width="680" cellpadding="0" cellspacing="0" style="background:#fff;border:1px solid '+LINE+'"><tr><td style="background:'+NAVY+';padding:22px 28px;color:#fff"><div style="font-size:11px;letter-spacing:1px;opacity:.8">EUNSUNG MEXICANA · INVENTORY MANAGEMENT SYSTEM</div><div style="font-size:21px;font-weight:700;margin-top:6px">Inventory Status Report</div><div style="font-size:13px;margin-top:4px;opacity:.9">'+repInvEsc(REPINV_NOMBRE)+' &nbsp;|&nbsp; '+D.fechaLarga+'</div></td></tr><tr><td style="padding:22px 28px">';
+  h+='<table width="100%" cellpadding="0" cellspacing="6" style="border-collapse:separate"><tr>'+kpi('Total value (USD)',repInvMoney(D.val))+kpi('Part numbers',D.rows.length.toLocaleString())+kpi('Total on hand<br>('+REPINV_UNIDAD+')',repInvNum(D.tot))+kpi('Parts at zero',D.ceros.length,D.ceros.length?RED:GRN)+kpi('Below minimum',D.bajos.length,D.bajos.length?AMB:GRN)+'</tr></table>';
+  if(REPINV_PALLET) h+='<div style="font-size:12px;color:#667085;margin-top:8px">Equivalent total pieces: <b style="color:#101828">'+Math.round(D.pzas).toLocaleString()+'</b></div>';
+  function tablaGrupo(titulo2,col1,obj){
+    var ks=Object.keys(obj).sort(function(a,b){return obj[b].val-obj[a].val;});
+    var t=h2(titulo2)+'<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr><th '+th+'>'+col1+'</th><th '+thr+'>Part numbers</th><th '+thr+'>On hand ('+REPINV_UNIDAD+')</th><th '+thr+'>Value (USD)</th><th '+thr+'>% of value</th></tr>';
+    ks.forEach(function(k){ var o=obj[k]; t+='<tr>'+td(repInvEsc(k))+td(o.pns.toLocaleString(),1)+td(repInvNum(o.tot),1)+td(repInvMoney(o.val),1)+td(D.val?(o.val/D.val*100).toFixed(1)+'%':'—',1)+'</tr>'; });
+    t+='<tr>'+td('Total',0,1)+td(D.rows.length.toLocaleString(),1,1)+td(repInvNum(D.tot),1,1)+td(repInvMoney(D.val),1,1)+td('100%',1,1)+'</tr></table>';
+    return t;
+  }
+  h+=tablaGrupo('Inventory by family','Family',D.fams);
+  if(REPINV_EDIF) h+=tablaGrupo('Inventory by building','Building',D.edifs);
+  h+=h2('Top 10 parts by value')+'<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr><th '+th+'>Part No.</th><th '+th+'>Description</th><th '+thr+'>On hand</th><th '+thr+'>Value (USD)</th></tr>';
+  D.top.forEach(function(x){ h+='<tr>'+td(repInvEsc(x.i.pn))+td(repInvEsc(String(x.i.desc||'').slice(0,40)))+td(repInvNum(x.a),1)+td(repInvMoney(x.v),1)+'</tr>'; });
+  h+='</table>';
+  h+=h2('Items requiring attention');
+  if(!D.ceros.length && !D.bajos.length){
+    h+='<div style="font-size:12px;color:'+GRN+';padding:8px 0">✔ No parts at zero stock or below minimum.</div>';
+  } else {
+    var LIM=15;
+    if(D.bajos.length){
+      h+='<div style="font-size:12px;font-weight:700;color:'+AMB+';margin:6px 0">Below minimum stock (&lt; '+D.mon.lim.toLocaleString()+' '+REPINV_UNIDAD+')</div><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr><th '+th+'>Part No.</th><th '+th+'>Description</th><th '+thr+'>On hand</th></tr>';
+      D.bajos.slice(0,LIM).forEach(function(x){ h+='<tr>'+td(repInvEsc(x.pn))+td(repInvEsc(String(x.desc||'').slice(0,40)))+td(repInvNum(x.stock),1)+'</tr>'; });
+      h+='</table>'; if(D.bajos.length>LIM) h+='<div style="font-size:11px;color:#667085;margin-top:4px">… and '+(D.bajos.length-LIM)+' more (see attached Excel)</div>';
+    }
+    if(D.ceros.length){
+      h+='<div style="font-size:12px;font-weight:700;color:'+RED+';margin:14px 0 6px">Parts at zero stock ('+D.ceros.length+')</div><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr><th '+th+'>Part No.</th><th '+th+'>Description</th><th '+th+'>Family</th></tr>';
+      D.ceros.slice(0,LIM).forEach(function(x){ h+='<tr>'+td(repInvEsc(x.pn))+td(repInvEsc(String(x.desc||'').slice(0,40)))+td(repInvEsc(x.familia||''))+'</tr>'; });
+      h+='</table>'; if(D.ceros.length>LIM) h+='<div style="font-size:11px;color:#667085;margin-top:4px">… and '+(D.ceros.length-LIM)+' more (see attached Excel)</div>';
+    }
+  }
+  h+='<div style="margin-top:24px;padding:12px 14px;background:'+SOFT+';border-left:4px solid '+NAVY+';font-size:12px;color:#344054">📎 The complete inventory detail is attached as an Excel workbook (Executive Summary · Inventory · Alerts).</div>';
+  h+='</td></tr><tr><td style="background:'+SOFT+';padding:14px 28px;font-size:11px;color:#667085;border-top:1px solid '+LINE+'">Generated automatically by the IMS · Eunsung Mexicana S.A. de C.V. · Tijuana, Mexico. Values in USD. This is a system-generated report.</td></tr></table></div>';
+  return h;
+}
+
+// ── Excel profesional (ExcelJS: formato, filtros, colores). Respaldo: SheetJS simple ──
+async function repInvExcel(){
+  var D=repInvData(), tag=REPINV_DOC.replace('reporte_inv_','').toUpperCase();
+  var name='IMS_'+tag+'_Inventory_Report_'+D.fechaISO+'.xlsx';
+  if(typeof ExcelJS==='undefined') return repInvExcelBasico(D,name);
+  var NAVY='FF1F3864', SOFT='FFF4F6FA', thin={style:'thin',color:{argb:'FFD9DEE7'}};
+  var wb=new ExcelJS.Workbook(); wb.creator='IMS · Eunsung Mexicana'; wb.created=new Date();
+  function hdr(row){ row.eachCell(function(c){ c.font={bold:true,color:{argb:'FFFFFFFF'},name:'Calibri',size:11}; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:NAVY}}; c.alignment={vertical:'middle',horizontal:'center',wrapText:true}; c.border={top:thin,bottom:thin,left:thin,right:thin}; }); row.height=30; }
+  // — Hoja 1: Resumen ejecutivo —
+  var s1=wb.addWorksheet('Executive Summary',{views:[{showGridLines:false}]});
+  s1.columns=[{width:34},{width:16},{width:18},{width:18},{width:14}];
+  s1.mergeCells('A1:E1'); s1.getCell('A1').value='Inventory Status Report'; s1.getCell('A1').font={bold:true,size:18,color:{argb:'FFFFFFFF'}}; s1.getCell('A1').fill={type:'pattern',pattern:'solid',fgColor:{argb:NAVY}}; s1.getRow(1).height=32; s1.getCell('A1').alignment={vertical:'middle',indent:1};
+  s1.mergeCells('A2:E2'); s1.getCell('A2').value=REPINV_NOMBRE+'  |  '+D.fechaLarga; s1.getCell('A2').font={size:11,color:{argb:'FF667085'}}; s1.getCell('A2').alignment={indent:1};
+  var k=[['Total inventory value (USD)',D.val,'$#,##0.00'],['Part numbers',D.rows.length,'#,##0'],['Total on hand ('+REPINV_UNIDAD+')',D.tot,'#,##0.00']];
+  if(REPINV_PALLET) k.push(['Equivalent total pieces',Math.round(D.pzas),'#,##0']);
+  k.push(['Parts at zero stock',D.ceros.length,'#,##0']); k.push(['Below minimum stock',D.bajos.length,'#,##0']);
+  var r=4; k.forEach(function(x){ s1.getCell('A'+r).value=x[0]; s1.getCell('A'+r).font={bold:true}; s1.getCell('A'+r).fill={type:'pattern',pattern:'solid',fgColor:{argb:SOFT}}; var c=s1.getCell('B'+r); c.value=x[1]; c.numFmt=x[2]; c.font={bold:true,color:{argb:NAVY}}; c.alignment={horizontal:'right'}; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:SOFT}}; ['A','B'].forEach(function(l){s1.getCell(l+r).border={bottom:thin,top:thin};}); r++; });
+  function grupo(titulo,col1,obj){
+    r+=1; s1.getCell('A'+r).value=titulo; s1.getCell('A'+r).font={bold:true,size:13,color:{argb:NAVY}}; r++;
+    var h=s1.getRow(r); h.values=[col1,'Part numbers','On hand ('+REPINV_UNIDAD+')','Value (USD)','% of value']; hdr(h); r++;
+    var ks=Object.keys(obj).sort(function(a,b){return obj[b].val-obj[a].val;}), ini=r;
+    ks.forEach(function(g){ var o=obj[g], row=s1.getRow(r); row.values=[g,o.pns,o.tot,o.val,D.val?o.val/D.val:0]; row.getCell(2).numFmt='#,##0'; row.getCell(3).numFmt='#,##0.00'; row.getCell(4).numFmt='$#,##0.00'; row.getCell(5).numFmt='0.0%'; row.eachCell(function(c){c.border={bottom:thin};}); r++; });
+    var t=s1.getRow(r); t.values=['Total',D.rows.length,D.tot,D.val,1]; t.getCell(2).numFmt='#,##0'; t.getCell(3).numFmt='#,##0.00'; t.getCell(4).numFmt='$#,##0.00'; t.getCell(5).numFmt='0.0%'; t.eachCell(function(c){c.font={bold:true}; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:SOFT}}; c.border={top:{style:'medium',color:{argb:NAVY}}};}); r++;
+  }
+  grupo('Inventory by family','Family',D.fams);
+  if(REPINV_EDIF) grupo('Inventory by building','Building',D.edifs);
+  r+=1; s1.getCell('A'+r).value='Top 10 parts by value'; s1.getCell('A'+r).font={bold:true,size:13,color:{argb:NAVY}}; r++;
+  var ht=s1.getRow(r); ht.values=['Part No. — Description','Family','On hand','Value (USD)']; hdr(ht); r++;
+  D.top.forEach(function(x){ var row=s1.getRow(r); row.values=[x.i.pn+' — '+String(x.i.desc||'').slice(0,40),x.i.familia||'',x.a,x.v]; row.getCell(3).numFmt='#,##0.00'; row.getCell(4).numFmt='$#,##0.00'; row.eachCell(function(c){c.border={bottom:thin};}); r++; });
+  // — Hoja 2: Inventario completo —
+  var s2=wb.addWorksheet('Inventory',{views:[{state:'frozen',ySplit:1}]});
+  var cols, fila, fmts;
+  if(REPINV_PALLET){
+    cols=[['Part No.',16],['Description',34],['Specification',18],['Family',12],['Building',10],['Initial Inv. (plt)',12],['In (plt)',10],['Out (plt)',10],['Stock (plt)',11],['Pcs per Pallet',12],['Equivalent Pcs',14],['Price per Pc (USD)',14],['Value (USD)',15],['Status',12]];
+    fmts={6:'#,##0.00',7:'#,##0.00',8:'#,##0.00',9:'#,##0.00',10:'#,##0',11:'#,##0',12:'$#,##0.0000',13:'$#,##0.00'};
+    fila=function(x){ var i=x.i, pp=repInvN(i.pzasPallet); return [i.pn||'',i.desc||'',i.spec||'',i.familia||'',i.ubicacion||'P1',repInvN(i.inicial),repInvN(i.entradas),repInvN(i.salidas),x.a,pp,Math.round(x.a*pp),repInvN(i.precio),+x.v.toFixed(2),i.estatus||'']; };
+  } else {
+    cols=[['Part No.',16],['Description',34],['Family',12],['Initial Inv.',12],['In',10],['Out',10],['Stock',11],['Loc1',9],['Loc2',9],['Loc3',9],['Price (USD)',12],['Value (USD)',15],['Status',12],['Location',14]];
+    fmts={4:'#,##0',5:'#,##0',6:'#,##0',7:'#,##0',11:'$#,##0.0000',12:'$#,##0.00'};
+    fila=function(x){ var i=x.i; return [i.pn||'',i.desc||'',i.familia||'',repInvN(i.inicial),repInvN(i.entradas),repInvN(i.salidas),x.a,i.loc1!==undefined?i.loc1:'',i.loc2!==undefined?i.loc2:'',i.loc3!==undefined?i.loc3:'',repInvN(i.precio),+x.v.toFixed(2),i.estatus||'',i.ubicacion||'Warehouse']; };
+  }
+  s2.columns=cols.map(function(c){return {width:c[1]};});
+  var h2r=s2.getRow(1); h2r.values=cols.map(function(c){return c[0];}); hdr(h2r);
+  var stockCol=REPINV_PALLET?9:7, valCol=REPINV_PALLET?13:12;
+  var ord=D.rows.slice().sort(function(a,b){return String(a.i.pn||'').localeCompare(String(b.i.pn||''));});
+  ord.forEach(function(x,n){
+    var row=s2.addRow(fila(x));
+    Object.keys(fmts).forEach(function(c){ row.getCell(+c).numFmt=fmts[c]; });
+    row.eachCell(function(c){ c.border={bottom:thin}; c.font={name:'Calibri',size:10}; });
+    if(n%2) row.eachCell(function(c){ c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFAFBFC'}}; });
+    if(x.a<=0){ var c=row.getCell(stockCol); c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFEE4E2'}}; c.font={bold:true,color:{argb:'FFB42318'},size:10}; }
   });
-  if(REPINV_EDIF){
-    c+=L+repInvT('edif')+':'+L;
-    Object.keys(edifs).sort().forEach(function(k){ c+='  - '+k+': '+edifs[k].pns+' PN · '+repInvFmt(edifs[k].tot).toLocaleString()+' '+REPINV_UNIDAD+L; });
-  }
-  if(bajos.length){
-    c+=L+repInvT('detBajo')+':'+L;
-    bajos.slice(0,LIM).forEach(function(x){ c+='  - '+x.pn+'  '+String(x.desc).slice(0,32)+'  ('+repInvT('ex')+' '+repInvFmt(x.stock).toLocaleString()+' / '+repInvT('min')+' '+mon.lim.toLocaleString()+')'+L; });
-    if(bajos.length>LIM) c+='  '+repInvT('mas').replace('{n}',bajos.length-LIM)+L;
-  } else { c+=L+repInvT('ok')+L; }
-  if(ceros.length){
-    c+=L+repInvT('detCero')+':'+L;
-    ceros.slice(0,LIM).forEach(function(x){ c+='  - '+x.pn+'  '+String(x.desc||'').slice(0,32)+(REPINV_EDIF&&x.ubicacion?' ['+x.ubicacion+']':'')+L; });
-    if(ceros.length>LIM) c+='  '+repInvT('mas').replace('{n}',ceros.length-LIM)+L;
-  }
-  c+=L+'='.repeat(50)+L+'IMS · Eunsung Printing Mex';
-  return {titulo:titulo,cuerpo:c};
+  var tr=s2.addRow(cols.map(function(c,n){ return n===0?'TOTAL':(n+1===stockCol?D.tot:(n+1===valCol?+D.val.toFixed(2):'')); }));
+  tr.eachCell(function(c){ c.font={bold:true}; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:SOFT}}; c.border={top:{style:'medium',color:{argb:NAVY}}}; });
+  tr.getCell(valCol).numFmt='$#,##0.00'; tr.getCell(stockCol).numFmt='#,##0.00';
+  s2.autoFilter={from:{row:1,column:1},to:{row:1,column:cols.length}};
+  // — Hoja 3: Alertas —
+  var s3=wb.addWorksheet('Alerts',{views:[{showGridLines:false}]}); s3.columns=[{width:18},{width:38},{width:16},{width:16}];
+  var q=1; s3.getCell('A'+q).value='Below minimum stock (< '+D.mon.lim.toLocaleString()+' '+REPINV_UNIDAD+')'; s3.getCell('A'+q).font={bold:true,size:13,color:{argb:'FFB54708'}}; q++;
+  var hb=s3.getRow(q); hb.values=['Part No.','Description','On hand','Minimum']; hdr(hb); q++;
+  if(!D.bajos.length){ s3.getCell('A'+q).value='None'; q++; }
+  D.bajos.forEach(function(x){ var row=s3.getRow(q); row.values=[x.pn,x.desc||'',x.stock,D.mon.lim]; row.getCell(3).numFmt='#,##0.00'; row.getCell(4).numFmt='#,##0'; row.eachCell(function(c){c.border={bottom:thin};}); q++; });
+  q+=1; s3.getCell('A'+q).value='Parts at zero stock ('+D.ceros.length+')'; s3.getCell('A'+q).font={bold:true,size:13,color:{argb:'FFB42318'}}; q++;
+  var hc=s3.getRow(q); hc.values=['Part No.','Description','Family','Status']; hdr(hc); q++;
+  if(!D.ceros.length){ s3.getCell('A'+q).value='None'; q++; }
+  D.ceros.forEach(function(i){ var row=s3.getRow(q); row.values=[i.pn||'',i.desc||'',i.familia||'',i.estatus||'']; row.eachCell(function(c){c.border={bottom:thin};}); q++; });
+  [s1,s2,s3].forEach(function(w){ w.pageSetup={orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0}; });
+  var buf=await wb.xlsx.writeBuffer(), bin='', u=new Uint8Array(buf);
+  for(var p=0;p<u.length;p+=8192) bin+=String.fromCharCode.apply(null,u.subarray(p,p+8192));
+  return {name:name,b64:btoa(bin)};
+}
+// Respaldo si ExcelJS no cargó: Excel simple (SheetJS)
+function repInvExcelBasico(D,name){
+  if(typeof XLSX==='undefined') return null;
+  var rows=[['Part No.','Description','Family','Stock','Value (USD)','Status']];
+  D.rows.forEach(function(x){ rows.push([x.i.pn||'',x.i.desc||'',x.i.familia||'',x.a,+x.v.toFixed(2),x.i.estatus||'']); });
+  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'Inventory');
+  return {name:name,b64:XLSX.write(wb,{bookType:'xlsx',type:'base64'})};
 }
 
 // Envía a una lista de correos por Google Apps Script (Gmail). Devuelve cuántos salieron.
 async function repInvSend(dest){
-  var r=repInvBuild(); var ok=0;
+  var r=repInvBuild(); var ok=0; var xl=null; try{ xl=await repInvExcel(); }catch(e){ console.error('repInvExcel',e); }
   for(var k=0;k<dest.length;k++){
     try{
-      await fetch(REPINV_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({clave:REPINV_CLAVE,to:dest[k],subject:r.titulo,message:r.cuerpo})});
+      await fetch(REPINV_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({clave:REPINV_CLAVE,to:dest[k],subject:r.titulo,message:r.cuerpo,html:r.html,attachName:xl?xl.name:'',attachB64:xl?xl.b64:''})});
       ok++;
       await new Promise(function(res){setTimeout(res,1000);});
     }catch(err){ console.error('repInvSend',err); }
