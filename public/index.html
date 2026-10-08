@@ -2307,11 +2307,16 @@ const _cacheLinea = {};
 async function esPiezaDeLinea(pn){
   pn = String(pn||'').trim();
   if (pn in _cacheLinea) return _cacheLinea[pn];
-  let r = false;
+  let r = false, esVC = false;
   try {
-    const q = await db.collection('pallets_medio').where('parte','==',pn).limit(30).get();
-    q.forEach(function(d){ if (/^(S[1-5]|Zhongke)$/i.test(String((d.data()||{}).maquina||'').trim())) r = true; });
-  } catch(e) { r = /^GH69/i.test(pn); } // si falla la consulta, se protege igual
+    const q = await db.collection('pallets_medio').where('parte','==',pn).limit(60).get();
+    q.forEach(function(d){
+      const m = String((d.data()||{}).maquina||'').trim();
+      if (/^(S[1-5]|Zhongke)$/i.test(m)) r = true;      // sale de S1–S5 / Zhongke → solo por QR
+      if (/^VC[12]$/i.test(m)) esVC = true;              // VC1 / VC2 → captura manual como antes
+    });
+    if (esVC) r = false;
+  } catch(e) { r = false; }  // si falla la consulta no se bloquea nada (VC y demás siguen manuales)
   _cacheLinea[pn] = r;
   return r;
 }
