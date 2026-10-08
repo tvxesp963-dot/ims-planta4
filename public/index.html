@@ -2012,7 +2012,7 @@ async function doMovInner() {
     if (!rc.ok) { limpiarFormMov(); alert('⚠️ '+rc.msg); return; }
     palletInfo = {id:scanPallet.id, maq:rc.maq||''};
     scanPallet=null; // ya reclamado: no volver a marcarlo después
-  } else if ((movTipo==='E' || movTipo==='S') && await esPiezaDeLinea(item.pn)) {
+  } else if ((movTipo==='E' || movTipo==='S') && esTerminadoLinea(item.desc) && await esPiezaDeLinea(item.pn)) {
     const okClave = await pedirClaveManual(item.pn, qty, movTipo);
     if (!okClave) return;
     claveManualOk = true;
@@ -2304,6 +2304,8 @@ var PALLET_DEST='IMS P4';
 
 /* ¿Esta parte sale de S1–S5 o Zhongke? (tiene pallets de esas máquinas) → solo entra por escaneo de etiqueta */
 const _cacheLinea = {};
+/* Mismo PN puede tener procesos distintos: el candado aplica SOLO al producto terminado por descripción: Gift Box (Top) y Lower Box (Bottom). Sheet, Chip Board y todo lo demás → manual sin contraseña */
+function esTerminadoLinea(desc){ const d=String(desc||''); return /GIFT\s*BOX|LOWER\s*BOX/i.test(d) && !/SHEET|CHIP\s*BOARD/i.test(d); }
 async function esPiezaDeLinea(pn){
   pn = String(pn||'').trim();
   if (pn in _cacheLinea) return _cacheLinea[pn];
