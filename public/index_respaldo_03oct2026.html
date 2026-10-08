@@ -376,9 +376,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         <div style="font-size:13px;font-weight:500" id="t-escanearQR">Escanear QR del material</div>
         <div style="font-size:10px;opacity:.6;margin-top:2px" id="t-tocaActivar">Toca para activar la cámara</div>
       </div>
-      <label style="display:block;text-align:center;font-size:12px;color:var(--accent);cursor:pointer;margin-top:-.2rem;margin-bottom:.4rem">🖼️ Leer QR desde una foto
-        <input type="file" accept="image/*" style="display:none" onchange="leerQRFoto(this)">
-      </label>
     </div>
     <div class="sw"><input class="si" id="movS" style="text-transform:uppercase" placeholder="O busca el Part Number..." data-t-ph="ph_buscaPN" oninput="this.value=this.value.toUpperCase();renderMovList()" ><span class="si-ic">🔍</span></div>
     <div id="movList" style="max-height:160px;overflow-y:auto;margin-bottom:.7rem"></div>
@@ -736,13 +733,8 @@ const MASTER_EMAIL = 'tvxesp963@gmail.com'; // único usuario que puede editar P
 function isMaster() { return !!(user && (user.email||'').toLowerCase() === MASTER_EMAIL); }
 
 function saveLocal() {
-  try {
-    localStorage.setItem('ims4_items', JSON.stringify(items));
-    localStorage.setItem('ims4_movs', JSON.stringify(movs));
-  } catch(e) { console.warn('saveLocal:', e); }
-}
-function _withTimeout(p, ms) {
-  return Promise.race([p, new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('Firebase no respondió (revisa internet/permisos)')); }, ms||8000); })]);
+  localStorage.setItem('ims4_items', JSON.stringify(items));
+  localStorage.setItem('ims4_movs', JSON.stringify(movs));
 }
 
 function _findEditIdx() {
@@ -814,17 +806,8 @@ function closeEdit() { document.getElementById('modalEdit').style.display = 'non
 window.closeEdit = closeEdit;
 
 async function saveEdit() {
-  try {
-    toast('Guardando...', 'info');
-    await _saveEditCore();
-  } catch(e) {
-    console.error('saveEdit:', e);
-    toast('❌ Error al guardar: ' + (e && e.message ? e.message : e), 'err');
-  }
-}
-async function _saveEditCore() {
   const idx = _findEditIdx();
-  if (idx === undefined || idx === null || !items[idx]) { toast('❌ No se encontró la parte. Cierra y vuelve a abrir Editar', 'err'); return; }
+  if (idx === undefined || idx === null) return;
   const oldItemRef = items[idx];
   const esMaster = isMaster();
   // Para todos los demás usuarios, PN, descripción, familia, inventario y precio son de solo
@@ -899,12 +882,12 @@ async function _saveEditCore() {
       const sameKey = (oldItem.pn||'') === newPN && (oldItem.desc||'') === newDesc;
       const newDocId = sameKey ? oldDocId : getDocId(newPN, newDesc);
       if (oldDocId !== newDocId) {
-        await _withTimeout(db.collection('planta4_inventario').doc(oldDocId).delete());
+        await db.collection('planta4_inventario').doc(oldDocId).delete();
       }
       // Quitar _docId antes de guardar (es campo interno)
       var dataGuardar = Object.assign({}, items[idx]);
       delete dataGuardar._docId;
-      await _withTimeout(db.collection('planta4_inventario').doc(newDocId).set(dataGuardar, {merge:true}));
+      await db.collection('planta4_inventario').doc(newDocId).set(dataGuardar, {merge:true});
       items[idx]._docId = newDocId;
     } catch(e) { console.error('saveEdit Firestore:', e); toast('Local OK. Firebase: '+e.message, 'warn'); }
   }
@@ -930,7 +913,7 @@ async function deleteFromEdit() {
   try {
     var docId = it._docId || getDocId(it.pn, it.desc);
     // Borrar SOLO este documento
-    if (db) await _withTimeout(db.collection('planta4_inventario').doc(docId).delete());
+    if (db) await db.collection('planta4_inventario').doc(docId).delete();
     // Si queda otro renglón con el mismo PN+Desc (duplicado), NO se tocan los movimientos
     var quedaOtro = items.some(function(x){
       return x !== it && (x._docId || getDocId(x.pn,x.desc)) !== docId &&
@@ -1958,39 +1941,7 @@ function selForMov(idx) {
 
 function adjQ(d) { const inp=document.getElementById('mfQty'); inp.value=Math.max(1,(parseInt(inp.value)||0)+d); }
 
-var _movBusy=false;
-async function doMov(){
-  if(_movBusy) { toast('⏳ Espera, se está registrando…','info'); return; }
-  _movBusy=true;
-  const wd=setTimeout(()=>{ _movBusy=false; },20000); // seguro: nunca se queda trabado más de 20 s
-  try{ toast('⏳ Registrando…','info'); await doMovInner(); }
-  catch(e){ console.error(e); toast('❌ Error al registrar: '+(e&&e.message?e.message:e),'err'); }
-  finally { clearTimeout(wd); _movBusy=false; }
-}
-// Reclama el pallet de forma atómica: solo UNA persona/escaneo puede pasarlo de PENDING a RECEIVED
-async function reclamarPallet(){
-  if(!scanPallet) return {ok:true};
-  const ref=db.collection('pallets_medio').doc(scanPallet.id);
-  const por=(user&&user.name)||'', ahora=new Date().toISOString();
-  try{
-    const espera=new Promise(res=>setTimeout(()=>res({ok:false,msg:'Tiempo agotado verificando el pallet (red o permisos). Intenta de nuevo.'}),10000));
-    const trabajo=db.runTransaction(async tx=>{
-      const d=await tx.get(ref);
-      if(d.exists){
-        const st=d.data().status;
-        if(st==='RECEIVED') return {ok:false,msg:'Pallet '+scanPallet.id+' YA fue escaneado'+(d.data().recibidoFecha?' el '+new Date(d.data().recibidoFecha).toLocaleString():'')+(d.data().recibidoPor?' por '+d.data().recibidoPor:'')+' — no se registra de nuevo'};
-        if(st==='VOID') return {ok:false,msg:'Pallet '+scanPallet.id+' está ANULADO — no se puede recibir'};
-        tx.update(ref,{status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora});
-        return {ok:true,maq:d.data().maquina||''};
-      } else {
-        tx.set(ref,{status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora,creadoDesdeIMS:true});
-      }
-      return {ok:true,maq:''};
-    });
-    return await Promise.race([trabajo,espera]);
-  }catch(e){ return {ok:false,msg:'No se pudo verificar el pallet (red o permiso): '+e.message}; }
-}
-async function doMovInner() {
+async function doMov() {
   if (user && user.role === 'viewer') { toast('Solo lectura — sin permisos para movimientos','err'); return; }
   if (selIdx===null) { toast('Selecciona un Part Number','err'); return; }
   const qty = parseInt(document.getElementById('mfQty').value)||0;
@@ -1999,23 +1950,10 @@ async function doMovInner() {
   if (movTipo==='S'&&qty>item.actual) { toast('Stock insuficiente: '+item.actual.toLocaleString()+' disponibles','err'); return; }
   const dest = document.getElementById('mfDest').value;
   const ref = document.getElementById('mfRef').value.trim();
-  let palletInfo = null, claveManualOk = false;
   if (scanPallet && movTipo==='E' && ref.toUpperCase()===scanPallet.id.toUpperCase()) {
-    const candL = (qty===scanPallet.qty) ? buscarEntradaManual(item.pn,qty) : null;
-    if (candL && confirm(txtLigar(candL,scanPallet.id,qty))) {
-      await ligarPallet(candL,scanPallet.id);
-      limpiarFormMov();
-      toast('✅ Pallet ligado a la entrada existente (sin sumar de nuevo)','ok');
-      return;
-    }
-    const rc = await reclamarPallet();
-    if (!rc.ok) { limpiarFormMov(); alert('⚠️ '+rc.msg); return; }
-    palletInfo = {id:scanPallet.id, maq:rc.maq||''};
-    scanPallet=null; // ya reclamado: no volver a marcarlo después
-  } else if ((movTipo==='E' || movTipo==='S') && esTerminadoLinea(item.desc) && await esPiezaDeLinea(item.pn)) {
-    const T={es:'🔒 Bloqueado: este producto terminado de línea solo se maneja escaneando el QR del pallet. No se permite captura manual.',en:'🔒 Locked: this finished line product can only be handled by scanning the pallet QR. Manual entry is not allowed.',ko:'🔒 잠김: 라인 완제품은 팔레트 QR 스캔으로만 처리할 수 있습니다. 수동 입력은 허용되지 않습니다.'};
-    alert(T[IMS_LANG]||T.es);
-    return;
+    try { const pd = await db.collection('pallets_medio').doc(scanPallet.id).get();
+      if (pd.exists && (pd.data().status==='RECEIVED' || pd.data().status==='VOID')) { toast('Pallet '+scanPallet.id+(pd.data().status==='VOID'?' anulado':' ya recibido')+' — no se registra de nuevo','err'); return; }
+    } catch(e) {}
   }
   if (movTipo==='E') { item.entradas+=qty; item.actual+=qty; }
   else if (movTipo==='S') { item.salidas+=qty; item.actual-=qty; }
@@ -2025,8 +1963,6 @@ async function doMovInner() {
   if (!item.historial) item.historial=[];
   item.historial.push(hItem);
   const mov = {tipo:movTipo,pn:item.pn,desc:item.desc,familia:item.familia,qty,fecha:new Date().toISOString(),user:user.name,ref,stock:item.actual,loc:item.ubicacion};
-  if (palletInfo) { mov.origen='LINEA'; mov.pallet=palletInfo.id; mov.maq=palletInfo.maq; }
-  else if (claveManualOk) { mov.origen='MANUAL'; mov.autorizado=true; }
   movs.unshift(mov);
   saveLocal();
   await pushMov(mov);
@@ -2136,7 +2072,7 @@ async function startScan(){
     const video=document.getElementById('scanVideo');
     const preview=document.getElementById('scanPreview');
     const btn=document.getElementById('scanBtn');
-    const constraints={video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false};
+    const constraints={video:{facingMode:{ideal:'environment'}},audio:false};
     scanStream=await navigator.mediaDevices.getUserMedia(constraints);
     video.srcObject=scanStream;
     video.setAttribute('playsinline','true');
@@ -2158,60 +2094,23 @@ async function startScan(){
     scanActive=false;
   }
 }
-// Lector de QR: usa el detector nativo del celular (más potente) y, si no existe, jsQR
-async function decodificarQR(canvas){
-  if ('BarcodeDetector' in window) {
-    try {
-      window._bd = window._bd || new BarcodeDetector({formats:['qr_code']});
-      const r = await window._bd.detect(canvas);
-      if (r && r[0] && r[0].rawValue) return r[0].rawValue;
-    } catch(e) {}
-  }
-  const ctx = canvas.getContext('2d');
-  const img = ctx.getImageData(0,0,canvas.width,canvas.height);
-  const code = jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});
-  return (code && code.data) ? code.data : null;
-}
-let _scanBusy=false;
-async function scanFrame(){
+function scanFrame(){
   const video=document.getElementById('scanVideo');
   const canvas=document.getElementById('scanCanvas');
-  if(!video||!scanActive||video.readyState<2||_scanBusy) return;
-  _scanBusy=true;
+  if(!video||!scanActive||video.readyState<2) return;
   try{
     canvas.width=video.videoWidth||320;
     canvas.height=video.videoHeight||240;
     const ctx=canvas.getContext('2d');
     ctx.drawImage(video,0,0,canvas.width,canvas.height);
-    const txt=await decodificarQR(canvas);
-    if(txt && scanActive){
+    const img=ctx.getImageData(0,0,canvas.width,canvas.height);
+    const code=jsQR(img.data,img.width,img.height,{inversionAttempts:'attemptBoth'});
+    if(code&&code.data){
       stopScan();
-      processQRScan(txt);
+      processQRScan(code.data);
     }
   }catch(e){console.warn('scan:',e);}
-  _scanBusy=false;
 }
-// Leer el QR desde una foto o captura guardada en el celular
-function leerQRFoto(inp){
-  const f=inp.files&&inp.files[0]; if(!f) return;
-  const img=new Image();
-  img.onload=async function(){
-    let txt=null;
-    for (const esc of [1,2,3]) {
-      const c=document.createElement('canvas');
-      c.width=Math.min(3000,Math.round(img.width*esc)); c.height=Math.round(img.height*(c.width/img.width));
-      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-      txt=await decodificarQR(c);
-      if(txt) break;
-    }
-    inp.value='';
-    URL.revokeObjectURL(img.src);
-    if(txt) processQRScan(txt); else toast('❌ No se pudo leer el QR de la foto. Acércate más o toma otra foto','err');
-  };
-  img.onerror=function(){ toast('❌ No se pudo abrir la foto','err'); };
-  img.src=URL.createObjectURL(f);
-}
-window.leerQRFoto=leerQRFoto;
 function stopScan(){
   scanActive=false;
   if(scanInterval){clearInterval(scanInterval);scanInterval=null;}
@@ -2300,76 +2199,6 @@ window.stopInvScan=stopInvScan;
 // ── PALLET DE LÍNEA (QR con cantidad e ID: PN|DESC|FAMILIA|CANTIDAD|ID-PALLET) ──
 var scanPallet=null;
 var PALLET_DEST='IMS P4';
-
-
-/* ¿Esta parte sale de S1–S5 o Zhongke? (tiene pallets de esas máquinas) → solo entra por escaneo de etiqueta */
-const _cacheLinea = {};
-/* Mismo PN puede tener procesos distintos: el candado aplica SOLO al producto terminado por descripción: Gift Box (Top) y Lower Box (Bottom). Sheet, Chip Board y todo lo demás → manual sin contraseña */
-function esTerminadoLinea(desc){ const d=String(desc||''); return /GIFT\s*BOX|LOWER\s*BOX/i.test(d) && !/SHEET|CHIP\s*BOARD/i.test(d); }
-async function esPiezaDeLinea(pn){
-  pn = String(pn||'').trim();
-  if (pn in _cacheLinea) return _cacheLinea[pn];
-  let r = false, esVC = false;
-  try {
-    const q = await db.collection('pallets_medio').where('parte','==',pn).limit(60).get();
-    q.forEach(function(d){
-      const m = String((d.data()||{}).maquina||'').trim();
-      if (/^(S[1-5]|Zhongke)$/i.test(m)) r = true;      // sale de S1–S5 / Zhongke → solo por QR
-      if (/^VC[12]$/i.test(m)) esVC = true;              // VC1 / VC2 → captura manual como antes
-    });
-    if (esVC) r = false;
-  } catch(e) { r = false; }  // si falla la consulta no se bloquea nada (VC y demás siguen manuales)
-  _cacheLinea[pn] = r;
-  return r;
-}
-/* 🔒 CANDADO: entrada MANUAL de piezas de línea (GH69) sin etiqueta. Pide contraseña de autorización.
-   Para cambiar la contraseña, edita solo la línea de abajo. */
-const CLAVE_ENTRADA_MANUAL = 'P4-Autoriza-2026';
-const TXT_CLAVE = {
-  es:{tS:'🔒 Salida manual bloqueada',mS:(pn,q)=>'La parte '+pn+' ('+q.toLocaleString()+' pzs) viene de línea. Descontarla a mano requiere autorización. Ingresa la contraseña.',t:'🔒 Entrada manual bloqueada',m:(pn,q)=>'La parte '+pn+' ('+q.toLocaleString()+' pzs) viene de línea y no tiene etiqueta escaneada. Lo correcto es escanear la etiqueta del pallet. Si es un caso especial, pide autorización e ingresa la contraseña.',ph:'Contraseña de autorización',ok:'Autorizar',cancel:'Cancelar',bad:'Contraseña incorrecta'},
-  en:{tS:'🔒 Manual removal locked',mS:(pn,q)=>'Part '+pn+' ('+q.toLocaleString()+' pcs) comes from the line. Deducting it by hand requires authorization. Enter the password.',t:'🔒 Manual entry locked',m:(pn,q)=>'Part '+pn+' ('+q.toLocaleString()+' pcs) comes from the line and its label was not scanned. The correct way is to scan the pallet label. For a special case, ask for authorization and enter the password.',ph:'Authorization password',ok:'Authorize',cancel:'Cancel',bad:'Wrong password'},
-  ko:{tS:'🔒 수동 출고 잠김',mS:(pn,q)=>'부품 '+pn+' ('+q.toLocaleString()+' pcs)은(는) 라인에서 온 것입니다. 수동 차감은 승인이 필요합니다. 비밀번호를 입력하세요.',t:'🔒 수동 입고 잠김',m:(pn,q)=>'부품 '+pn+' ('+q.toLocaleString()+' pcs)은(는) 라인에서 온 것이며 라벨이 스캔되지 않았습니다. 팔레트 라벨을 스캔하는 것이 올바른 방법입니다. 예외 상황이면 승인을 받고 비밀번호를 입력하세요.',ph:'승인 비밀번호',ok:'승인',cancel:'취소',bad:'비밀번호가 틀렸습니다'}
-};
-function pedirClaveManual(pn, qty, tipo){
-  return new Promise(function(resolve){
-    const L = TXT_CLAVE[IMS_LANG] || TXT_CLAVE.es;
-    const esS = (tipo==='S');
-    const ov = document.createElement('div');
-    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
-    ov.innerHTML = '<div style="background:#171a23;border:1px solid #f5a623;border-radius:14px;padding:20px;max-width:380px;width:100%;color:#e8eaf0;font-family:inherit">'
-      + '<div style="font-size:17px;font-weight:700;margin-bottom:8px">'+(esS?L.tS:L.t)+'</div>'
-      + '<div style="font-size:13px;color:#aab;margin-bottom:12px;line-height:1.4">'+(esS?L.mS(pn,qty):L.m(pn,qty))+'</div>'
-      + '<input id="claveManualIn" type="password" autocomplete="off" placeholder="'+L.ph+'" style="width:100%;box-sizing:border-box;padding:11px;border-radius:8px;border:1px solid #3a4054;background:#0f1117;color:#fff;font-size:15px">'
-      + '<div id="claveManualErr" style="color:#ff6b6b;font-size:12px;min-height:16px;margin-top:6px"></div>'
-      + '<div style="display:flex;gap:8px;margin-top:8px"><button id="claveManualNo" style="flex:1;padding:11px;border-radius:8px;border:1px solid #3a4054;background:transparent;color:#e8eaf0;cursor:pointer">'+L.cancel+'</button>'
-      + '<button id="claveManualSi" style="flex:1;padding:11px;border-radius:8px;border:none;background:#f5a623;color:#111;font-weight:700;cursor:pointer">'+L.ok+'</button></div></div>';
-    document.body.appendChild(ov);
-    const inp = ov.querySelector('#claveManualIn'); inp.focus();
-    function cerrar(v){ document.body.removeChild(ov); resolve(v); }
-    function probar(){ if (inp.value === CLAVE_ENTRADA_MANUAL) cerrar(true); else { ov.querySelector('#claveManualErr').textContent = L.bad; inp.value=''; inp.focus(); } }
-    ov.querySelector('#claveManualSi').onclick = probar;
-    ov.querySelector('#claveManualNo').onclick = function(){ cerrar(false); };
-    inp.onkeydown = function(e){ if(e.key==='Enter') probar(); else if(e.key==='Escape') cerrar(false); };
-  });
-}
-function limpiarFormMov(){ try{ scanPallet=null; selIdx=null; document.getElementById('movForm').className='mf'; document.getElementById('mfRef').value=''; }catch(e){} }
-function buscarEntradaManual(pn,q){
-  const pnS=String(pn||'').trim().toUpperCase();
-  return (typeof movs!=='undefined'?movs:[]).find(m=>(m.tipo==='E'||m.tipo==='IN') && String(m.pn||'').trim().toUpperCase()===pnS && Number(m.qty)===Number(q) && !(m.ref||m.referencia) && (Date.now()-new Date(m.fecha).getTime())<3*864e5);
-}
-// Liga un pallet a una entrada manual que ya existe, SIN sumar de nuevo al stock
-async function ligarPallet(cand,id){
-  const pd=await db.collection('pallets_medio').doc(id).get();
-  const maq=(pd.exists&&pd.data().maquina)||'';
-  const qs=await db.collection('planta4_movimientos').where('fecha','==',cand.fecha).where('pn','==',cand.pn).limit(1).get();
-  if(!qs.empty) await qs.docs[0].ref.update({ref:id,origen:'LINEA',pallet:id,maq:maq});
-  const por=(user&&user.name)||'', ahora=new Date().toISOString();
-  if(pd.exists) await db.collection('pallets_medio').doc(id).update({status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora,vinculadoManual:true});
-  else await db.collection('pallets_medio').doc(id).set({status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora,vinculadoManual:true,creadoDesdeIMS:true});
-  cand.ref=id; cand.origen='LINEA'; cand.pallet=id; cand.maq=maq;
-  try{ saveLocal(); renderHist(); }catch(e){}
-}
-function txtLigar(cand,id,q){ return 'Ya existe una entrada MANUAL de '+Number(q).toLocaleString()+' pzas de '+cand.pn+' ('+new Date(cand.fecha).toLocaleString()+') sin etiqueta.\n\n¿Ligar el pallet '+id+' a esa entrada SIN sumar de nuevo?\n\nAceptar = ligar sin sumar\nCancelar = dar entrada nueva (se suma al stock)'; }
 async function aplicarPallet(parts){
   scanPallet=null;
   var q=parseInt(parts[3]), id=(parts[4]||'').trim();
@@ -2381,18 +2210,11 @@ async function aplicarPallet(parts){
     var d=await db.collection('pallets_medio').doc(id).get();
     if(d.exists){
       var p=d.data();
-      if(p.status==='RECEIVED'){ limpiarFormMov(); alert('⚠️ El pallet '+id+' YA fue escaneado'+(p.recibidoFecha?' el '+new Date(p.recibidoFecha).toLocaleString():'')+(p.recibidoPor?' por '+p.recibidoPor:'')+'.\n\nNo se registra de nuevo.'); return; }
-      else if(p.status==='VOID'){ limpiarFormMov(); alert('⚠️ El pallet '+id+' está ANULADO. No se puede recibir.'); return; }
+      if(p.status==='RECEIVED') toast('⚠️ Pallet '+id+' YA fue recibido ('+(p.recibidoEn||'')+')','err');
+      else if(p.status==='VOID') toast('⚠️ Pallet '+id+' está ANULADO','err');
       else if(p.destino&&p.destino!==PALLET_DEST) toast('⚠️ Este pallet es para '+p.destino,'err');
     }
-    // ¿Ya se dio entrada manual a este pallet (misma parte y cantidad, sin etiqueta)? Ligarlo SIN sumar otra vez
-    const cand=buscarEntradaManual(parts[0],q);
-    if(cand && confirm(txtLigar(cand,id,q))){
-      await ligarPallet(cand,id);
-      limpiarFormMov();
-      toast('✅ Pallet '+id+' ligado a la entrada existente (sin sumar de nuevo)','ok');
-    }
-  }catch(e){ console.error(e); toast('⚠️ No se pudo verificar/ligar el pallet: '+(e&&e.message?e.message:e),'err'); }
+  }catch(e){}
 }
 async function marcarPalletRecibido(ref){
   if(!scanPallet||!ref||ref.toUpperCase()!==scanPallet.id.toUpperCase()) return;
@@ -2406,15 +2228,14 @@ function processQRScan(text){
   const parts=text.split('|');
   const pn=(parts[0]||text).trim();
   const desc=(parts[1]||'').trim();
-  // Si el QR tiene descripción, buscar por PN + descripción exacta primero (sin importar mayúsculas/espacios)
-  const nP=x=>String(x||'').trim().toUpperCase().replace(/\s+/g,'');
+  // Si el QR tiene descripción, buscar por PN + descripción exacta primero
   let idx=-1;
   if(desc){
-    idx=items.findIndex(i=>nP(i.pn)===nP(pn) && String(i.desc||'').trim().toUpperCase()===desc.toUpperCase());
+    idx=items.findIndex(i=>i.pn===pn && i.desc.toUpperCase()===desc.toUpperCase());
   }
   // Si no encontró con desc, buscar solo por PN (QR viejo sin desc)
   if(idx<0){
-    idx=items.findIndex(i=>nP(i.pn)===nP(pn));
+    idx=items.findIndex(i=>i.pn===pn);
   }
   if(idx>=0){
     if(!movTipo) initMov('E');
@@ -2429,8 +2250,7 @@ function processQRScan(text){
     } else {
       document.getElementById('movS').value=pn;
       renderMovList();
-      if(parts.length>=5) toast('❌ La parte '+pn+' no existe en el IMS P4 — dala de alta antes de recibir el pallet','err');
-      else toast('🔍 '+pn+' — selecciona de la lista','info');
+      toast('🔍 '+pn+' — selecciona de la lista','info');
     }
   }
 }
@@ -2463,14 +2283,11 @@ function movHTML(m) {
   const loc = m.loc || m.ubicacion || '–';
   const usr = m.user || m.usuario || '';
   const ref = m.ref || m.referencia || '';
-  let badge='';
-  if (m.origen==='LINEA') badge=' · <span style="color:var(--green)">📦 Etiqueta de línea'+(m.maq?' '+m.maq:'')+' · '+(m.pallet||'')+'</span>';
-  else if (tipoNorm==='E' && /^GH69/i.test(m.pn||'') && !ref) badge=' · <span style="color:var(--red)">⚠️ sin etiqueta de línea</span>';
   const icons={E:'⬇️',S:'⬆️',T:'🔀',INI:'🏁'};
   const cols={E:'mb-E',S:'mb-S',T:'mb-T',INI:'mb-T'};
   const qc={E:'color:var(--green)',S:'color:var(--red)',T:'color:var(--accent)'};
   const signs={E:'+',S:'-',T:'→'};
-  return '<div class="mc"><div class="mb '+(cols[tipoNorm]||'mb-T')+'">'+(icons[tipoNorm]||'🔄')+'</div><div style="flex:1;min-width:0"><div class="mc-t">'+(m.pn||'–')+'</div><div class="mc-d">'+(m.desc||'')+' · '+(m.familia||'')+' · '+usr+'</div><div class="mc-l">📍 '+loc+' · '+fmtDate(m.fecha)+(ref?' · '+ref:'')+badge+'</div></div><div class="mc-q" style="'+(qc[tipoNorm]||'')+'">'+(signs[tipoNorm]||'')+qty+'</div></div>';
+  return '<div class="mc"><div class="mb '+(cols[tipoNorm]||'mb-T')+'">'+(icons[tipoNorm]||'🔄')+'</div><div style="flex:1;min-width:0"><div class="mc-t">'+(m.pn||'–')+'</div><div class="mc-d">'+(m.desc||'')+' · '+(m.familia||'')+' · '+usr+'</div><div class="mc-l">📍 '+loc+' · '+fmtDate(m.fecha)+(ref?' · '+ref:'')+'</div></div><div class="mc-q" style="'+(qc[tipoNorm]||'')+'">'+(signs[tipoNorm]||'')+qty+'</div></div>';
 }
 
 // Exporta el historial (Historial > Excel) respetando el filtro de tipo y la búsqueda actuales
