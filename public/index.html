@@ -11,7 +11,7 @@
 /* ===== CONTROL DE VERSION (evita que celulares/laptops se queden con version vieja en cache) =====
    Cada vez que subas un index.html actualizado, cambia este numero (ej: 20260711).
    El sistema detecta el cambio y recarga automaticamente la version nueva. */
-var APP_VERSION = "20261002a";
+var APP_VERSION = "20261008a";
 (function(){
   try{
     var key = 'ims_p4_version';
@@ -30,6 +30,7 @@ var APP_VERSION = "20261002a";
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@400;500;600&display=swap');
 :root{--bg:#080c18;--bg2:#0e1325;--bg3:#141929;--bg4:#1c2238;--accent:#4da6ff;--accent2:#1a6fd4;--accent3:#0d4a99;--green:#00e676;--green2:#00b85a;--red:#ff4444;--amber:#ffb300;--cyan:#00e5ff;--text:#dde3f5;--text2:#7a88b8;--text3:#3d4d77;--border:#1e2a4a;--border2:#263558;}
@@ -519,6 +520,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         </select>
       </div>
       <button class="btn-conf bc-E" onclick="addImsUser()" id="t-btnAgregarUsuario">+ Agregar usuario</button>
+    </div>
+    <div class="sh" id="t-repInvSh">Reporte por correo</div>
+    <div class="card" style="padding:.9rem">
+      <h3 style="font-size:.8rem;margin-bottom:6px" id="t-repInvTitulo">📦 Reporte de inventario por correo</h3>
+      <div style="font-size:10px;color:var(--text2);margin-bottom:10px;line-height:1.5" id="t-repInvInfo">Se envía automáticamente el primer día hábil de cada mes. Marca quién lo recibe.</div>
+      <div id="repInvList" style="margin-bottom:8px"></div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:6px;margin-bottom:8px">
+        <input class="ref-in" id="repInvExtra" type="email" placeholder="+ otro correo (si no está en la lista)" data-t-ph="ph_repInvOtro" style="margin:0">
+        <button class="btn-conf bc-E" onclick="repInvAddExtra()" id="t-repInvAgregar" style="width:auto;padding:0 14px">+ Agregar</button>
+      </div>
+      <button class="btn-conf bc-E" onclick="repInvSendNow()" id="t-repInvBtn" style="background:#3d2b1a;border:1px solid #e67e22;color:#e67e22">📤 Enviar reporte ahora</button>
     </div>
     <div class="sh">Firebase</div>
     <div class="card">
@@ -1237,6 +1249,12 @@ const IMS_TRANSLATIONS = {
     t_acImportLocSub: "Desde Excel PN+Loc1+Loc2+Loc3",
     t_shUsuarios: "Usuarios IMS",
     t_usuariosTitulo: "👥 Usuarios",
+    t_repInvSh: "Reporte por correo",
+    t_repInvTitulo: "📦 Reporte de inventario por correo",
+    t_repInvInfo: "Se envía automáticamente el primer día hábil de cada mes. Marca quién lo recibe.",
+    t_repInvAgregar: "+ Agregar",
+    t_repInvBtn: "📤 Enviar reporte ahora",
+    ph_repInvOtro: "+ otro correo (si no está en la lista)",
     t_thCorreo: "Correo",
     t_thNombre: "Nombre",
     t_thRol: "Rol",
@@ -1396,6 +1414,12 @@ const IMS_TRANSLATIONS = {
     t_acImportLocSub: "From Excel PN+Loc1+Loc2+Loc3",
     t_shUsuarios: "IMS Users",
     t_usuariosTitulo: "👥 Users",
+    t_repInvSh: "Email report",
+    t_repInvTitulo: "📦 Inventory report by email",
+    t_repInvInfo: "Sent automatically on the first business day of each month. Check who receives it.",
+    t_repInvAgregar: "+ Add",
+    t_repInvBtn: "📤 Send report now",
+    ph_repInvOtro: "+ other email (if not in the list)",
     t_thCorreo: "Email",
     t_thNombre: "Name",
     t_thRol: "Role",
@@ -1555,6 +1579,12 @@ const IMS_TRANSLATIONS = {
     t_acImportLocSub: "엑셀에서 (품번+위치1+2+3)",
     t_shUsuarios: "IMS 사용자",
     t_usuariosTitulo: "👥 사용자",
+    t_repInvSh: "이메일 보고서",
+    t_repInvTitulo: "📦 재고 보고서 이메일",
+    t_repInvInfo: "매월 첫 영업일에 자동 발송됩니다. 수신자를 선택하세요.",
+    t_repInvAgregar: "+ 추가",
+    t_repInvBtn: "📤 보고서 지금 보내기",
+    ph_repInvOtro: "+ 다른 이메일 (목록에 없는 경우)",
     t_thCorreo: "이메일",
     t_thNombre: "이름",
     t_thRol: "역할",
@@ -1685,6 +1715,8 @@ function launch() {
   rb.className = 'ur '+(user.role==='admin'?'ra':user.role==='operador'?'ro':'rv');
   document.getElementById('navAdmin').style.display = user.role==='admin'?'flex':'none';
   if(user.role==='admin') setTimeout(loadImsUsers, 500);
+  if(user.role==='admin') setTimeout(repInvLoad, 900);
+  if(user.role!=='viewer') repInvStart();
   // VIEWER: ocultar todo excepto Inventario
   const isViewer = (user.role==='viewer');
   ['pgMov','pgTraz','pgQR','pgHist','pgPlan'].forEach(id=>{
@@ -1721,7 +1753,7 @@ function goPage(id, btn) {
   document.querySelectorAll('.bni').forEach(b=>b.classList.remove('on'));
   document.getElementById(id).classList.add('active');
   if (btn) btn.classList.add('on');
-  if (id==='pgAdmin') { buildAdmin(); if(user&&user.role==='admin') loadImsUsers(); }
+  if (id==='pgAdmin') { buildAdmin(); if(user&&user.role==='admin') { loadImsUsers(); repInvLoad(); } }
   if (id==='pgPlan') { loadPlan(); }
   // Mostrar botón regreso si no estamos en Dash
   const backBtn = document.getElementById('backBtn');
@@ -2517,6 +2549,206 @@ function exportHistExcel() {
   toast('✅ Excel descargado · '+f.length+' movimientos', 'ok');
 }
 window.exportHistExcel = exportHistExcel;
+
+// ══ REPORTE DE INVENTARIO POR CORREO (mensual · primer día hábil) ══
+// Destinatarios y candado mensual guardados en ims_config/reporte_inv_p4. Solo LEE el inventario.
+var REPINV_DOC='reporte_inv_p4', REPINV_NOMBRE='IMS Planta 4', REPINV_UNIDAD='pzas', REPINV_VALOR=true, REPINV_EDIF=false, REPINV_PALLET=false;
+var REPINV_EJS_SVC='service_2qhb0mc', REPINV_EJS_TPL='template_ai4fogx', REPINV_EJS_KEY='lusY-RyqKX9PNb4Wx';
+var REPINV_HORA={h:16,m:35};
+var REPINV_DEST=[], REPINV_USERS=[], REPINV_BUSY=false, REPINV_INTENTOS=0, REPINV_TIMER=null;
+var REPINV_TXT={
+  es:{titulo:'📦 Status de Inventario',pns:'Números de parte',total:'Existencia total',pzas:'Total en piezas',valor:'Valor total (USD)',cero:'Partes en cero',bajo:'Bajo stock mínimo',
+      fam:'POR FAMILIA',edif:'POR UBICACIÓN',detCero:'Partes en CERO',detBajo:'Partes BAJO MÍNIMO',mas:'... y {n} más',ok:'✅ Sin partes bajo mínimo',
+      ex:'exist',min:'mín',sinDest:'Marca al menos un correo primero',enviando:'⏳ Enviando reporte...',enviado:'✅ Reporte enviado a {n} correo(s)',err:'Error: ',sinEjs:'EmailJS no cargó, revisa tu internet'},
+  en:{titulo:'📦 Inventory Status',pns:'Part numbers',total:'Total on hand',pzas:'Total pieces',valor:'Total value (USD)',cero:'Parts at zero',bajo:'Below minimum stock',
+      fam:'BY FAMILY',edif:'BY LOCATION',detCero:'Parts at ZERO',detBajo:'Parts BELOW MINIMUM',mas:'... and {n} more',ok:'✅ No parts below minimum',
+      ex:'on hand',min:'min',sinDest:'Check at least one email first',enviando:'⏳ Sending report...',enviado:'✅ Report sent to {n} email(s)',err:'Error: ',sinEjs:'EmailJS did not load, check your internet'},
+  ko:{titulo:'📦 재고 현황',pns:'부품 번호',total:'총 재고',pzas:'총 수량(개)',valor:'총 금액 (USD)',cero:'재고 0 부품',bajo:'최소 재고 미달',
+      fam:'제품군별',edif:'위치별',detCero:'재고 0 부품',detBajo:'최소 재고 미달 부품',mas:'... 외 {n}건',ok:'✅ 최소 재고 미달 부품 없음',
+      ex:'재고',min:'최소',sinDest:'먼저 이메일을 하나 이상 선택하세요',enviando:'⏳ 보고서 전송 중...',enviado:'✅ 보고서가 {n}개 이메일로 전송되었습니다',err:'오류: ',sinEjs:'EmailJS를 불러오지 못했습니다. 인터넷을 확인하세요'}
+};
+function repInvT(k){ var l=(typeof IMS_LANG!=='undefined'&&REPINV_TXT[IMS_LANG])?IMS_LANG:'es'; return REPINV_TXT[l][k]; }
+function repInvN(v){ return parseFloat(v)||0; }
+function repInvFmt(n){ return Math.round(n*100)/100; }
+
+// Carga destinatarios guardados + usuarios del IMS (base de correos)
+async function repInvLoad(){
+  if(!db) return;
+  try{
+    var d=await db.collection('ims_config').doc(REPINV_DOC).get();
+    REPINV_DEST=(d.exists&&Array.isArray(d.data().destinatarios))?d.data().destinatarios.map(function(e){return String(e).toLowerCase();}):[];
+  }catch(e){ console.error('repInvLoad cfg:',e); }
+  try{
+    var su=await db.collection('ims_usuarios').get();
+    REPINV_USERS=[];
+    su.forEach(function(x){ var u=x.data(); if(u.email && u.activo!==false) REPINV_USERS.push({email:String(u.email).toLowerCase(),nombre:u.nombre||''}); });
+  }catch(e){ console.error('repInvLoad users:',e); }
+  repInvRender();
+}
+window.repInvLoad=repInvLoad;
+
+function repInvRender(){
+  var el=document.getElementById('repInvList'); if(!el) return;
+  var mapa={};
+  REPINV_USERS.forEach(function(u){ mapa[u.email]=u; });
+  REPINV_DEST.forEach(function(e){ if(!mapa[e]) mapa[e]={email:e,nombre:''}; });
+  var lista=Object.keys(mapa).sort().map(function(k){return mapa[k];});
+  if(!lista.length){ el.innerHTML='<div style="font-size:10px;color:var(--text2)">—</div>'; return; }
+  el.innerHTML=lista.map(function(u){
+    var on=REPINV_DEST.indexOf(u.email)>=0;
+    return '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg3);border:1px solid '+(on?'#e67e22':'var(--border2)')+';border-radius:7px;margin-bottom:5px;cursor:pointer">'
+      +'<input type="checkbox" '+(on?'checked':'')+' onchange="repInvToggle(\''+u.email+'\',this)" style="width:18px;height:18px;accent-color:#e67e22;cursor:pointer">'
+      +'<span style="font-size:.72rem">'+(u.nombre?'<strong>'+u.nombre+'</strong> · ':'')+'<span style="color:var(--text2)">'+u.email+'</span></span></label>';
+  }).join('');
+}
+async function repInvGuardar(arr){
+  await db.collection('ims_config').doc(REPINV_DOC).set({destinatarios:arr,actualizadoPor:(user&&user.email)||'',actualizadoEn:new Date().toISOString()},{merge:true});
+}
+window.repInvToggle=async function(email,chk){
+  chk.disabled=true;
+  var nuevo=REPINV_DEST.filter(function(e){return e!==email;});
+  if(chk.checked) nuevo.push(email);
+  try{ await repInvGuardar(nuevo); REPINV_DEST=nuevo; repInvRender(); }
+  catch(err){ console.error(err); toast(repInvT('err')+err.message,'err'); chk.checked=!chk.checked; chk.disabled=false; }
+};
+window.repInvAddExtra=async function(){
+  var inp=document.getElementById('repInvExtra'); var email=(inp.value||'').trim().toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast('Email ?','err'); return; }
+  if(REPINV_DEST.indexOf(email)>=0){ inp.value=''; return; }
+  var nuevo=REPINV_DEST.concat([email]);
+  try{ await repInvGuardar(nuevo); REPINV_DEST=nuevo; inp.value=''; repInvRender(); }
+  catch(err){ toast(repInvT('err')+err.message,'err'); }
+};
+
+// Lista de monitor de stock mínimo (misma lógica que el Monitor del Dashboard)
+function repInvListaMonitor(){
+  var lim=(typeof STOCK_MIN_LIMITE!=='undefined')?STOCK_MIN_LIMITE:0;
+  var lista;
+  if(typeof STOCK_MIN_MODO!=='undefined' && STOCK_MIN_MODO==='manual'){
+    lista=(STOCK_MIN_PNS_MANUAL||[]).map(function(p){
+      var o=(typeof p==='string')?{pn:p,desc:''}:p;
+      var it=o.desc?items.find(function(i){return (i.pn||'').toUpperCase()===o.pn.toUpperCase()&&(i.desc||'').toUpperCase()===o.desc.toUpperCase();})
+                   :items.find(function(i){return (i.pn||'').toUpperCase()===o.pn.toUpperCase();});
+      return {pn:o.pn,desc:it?it.desc:(o.desc||''),stock:it?repInvN(it.actual):0};
+    });
+  } else {
+    lista=items.slice().sort(function(a,b){return repInvN(a.actual)-repInvN(b.actual);}).slice(0,10)
+      .map(function(i){return {pn:i.pn,desc:i.desc||'',stock:repInvN(i.actual)};});
+  }
+  return {lim:lim,lista:lista};
+}
+
+function repInvBuild(){
+  var hoy=new Date();
+  var loc=(typeof IMS_LANG!=='undefined'&&IMS_LANG==='ko')?'ko-KR':((typeof IMS_LANG!=='undefined'&&IMS_LANG==='en')?'en-US':'es-MX');
+  var fechaStr=hoy.toLocaleDateString(loc,{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  var titulo=repInvT('titulo')+' — '+REPINV_NOMBRE+' — '+fechaStr;
+  var total=0, valor=0, pzasTot=0, ceros=[], fams={}, edifs={}, pnSet={};
+  items.forEach(function(i){
+    var a=repInvN(i.actual), pr=repInvN(i.precio), mult=REPINV_PALLET?repInvN(i.pzasPallet):1;
+    total+=a; pzasTot+=a*mult; valor+=a*mult*pr; pnSet[i.pn]=1;
+    var f=i.familia||'—'; if(!fams[f]) fams[f]={pns:0,tot:0,val:0}; fams[f].pns++; fams[f].tot+=a; fams[f].val+=a*mult*pr;
+    if(REPINV_EDIF){ var u=i.ubicacion||'—'; if(!edifs[u]) edifs[u]={pns:0,tot:0}; edifs[u].pns++; edifs[u].tot+=a; }
+    if(a<=0) ceros.push(i);
+  });
+  var mon=repInvListaMonitor();
+  var bajos=mon.lista.filter(function(x){return x.stock>0 && x.stock<mon.lim;});
+  var LIM=15, L='\n';
+  var c=titulo+L+'='.repeat(50)+L+L+'■ '+REPINV_NOMBRE+L;
+  c+='  • '+repInvT('pns')+': '+(REPINV_PALLET?Object.keys(pnSet).length:items.length).toLocaleString()+L;
+  c+='  • '+repInvT('total')+': '+repInvFmt(total).toLocaleString()+' '+REPINV_UNIDAD+L;
+  if(REPINV_PALLET) c+='  • '+repInvT('pzas')+': '+Math.round(pzasTot).toLocaleString()+' pzas'+L;
+  if(REPINV_VALOR) c+='  • '+repInvT('valor')+': $'+Math.round(valor).toLocaleString()+L;
+  c+='  • '+repInvT('cero')+': '+ceros.length+L;
+  c+='  • '+repInvT('bajo')+' (<'+mon.lim.toLocaleString()+' '+REPINV_UNIDAD+'): '+bajos.length+L;
+  c+=L+repInvT('fam')+':'+L;
+  Object.keys(fams).sort().forEach(function(k){
+    c+='  - '+k+': '+fams[k].pns+' PN · '+repInvFmt(fams[k].tot).toLocaleString()+' '+REPINV_UNIDAD+(REPINV_VALOR?' · $'+Math.round(fams[k].val).toLocaleString():'')+L;
+  });
+  if(REPINV_EDIF){
+    c+=L+repInvT('edif')+':'+L;
+    Object.keys(edifs).sort().forEach(function(k){ c+='  - '+k+': '+edifs[k].pns+' PN · '+repInvFmt(edifs[k].tot).toLocaleString()+' '+REPINV_UNIDAD+L; });
+  }
+  if(bajos.length){
+    c+=L+repInvT('detBajo')+':'+L;
+    bajos.slice(0,LIM).forEach(function(x){ c+='  - '+x.pn+'  '+String(x.desc).slice(0,32)+'  ('+repInvT('ex')+' '+repInvFmt(x.stock).toLocaleString()+' / '+repInvT('min')+' '+mon.lim.toLocaleString()+')'+L; });
+    if(bajos.length>LIM) c+='  '+repInvT('mas').replace('{n}',bajos.length-LIM)+L;
+  } else { c+=L+repInvT('ok')+L; }
+  if(ceros.length){
+    c+=L+repInvT('detCero')+':'+L;
+    ceros.slice(0,LIM).forEach(function(x){ c+='  - '+x.pn+'  '+String(x.desc||'').slice(0,32)+(REPINV_EDIF&&x.ubicacion?' ['+x.ubicacion+']':'')+L; });
+    if(ceros.length>LIM) c+='  '+repInvT('mas').replace('{n}',ceros.length-LIM)+L;
+  }
+  c+=L+'='.repeat(50)+L+'IMS · Eunsung Printing Mex';
+  return {titulo:titulo,cuerpo:c};
+}
+
+// Envía a una lista de correos (mismo EmailJS / plantilla que el reporte del MES). Devuelve cuántos salieron.
+async function repInvSend(dest){
+  if(typeof emailjs==='undefined'){ toast(repInvT('sinEjs'),'err'); return 0; }
+  var r=repInvBuild(); var ok=0;
+  emailjs.init(REPINV_EJS_KEY);
+  for(var k=0;k<dest.length;k++){
+    try{
+      await emailjs.send(REPINV_EJS_SVC,REPINV_EJS_TPL,{subject:r.titulo,message:r.cuerpo,to_email:dest[k],name:'IMS Inventarios'});
+      ok++;
+      await new Promise(function(res){setTimeout(res,1000);});
+    }catch(err){ console.error('repInvSend',err); }
+  }
+  return ok;
+}
+window.repInvSendNow=async function(){
+  if(!REPINV_DEST.length){ toast(repInvT('sinDest'),'err'); return; }
+  toast(repInvT('enviando'),'ok');
+  var ok=await repInvSend(REPINV_DEST);
+  toast(repInvT('enviado').replace('{n}',ok), ok>0?'ok':'err');
+};
+
+// ── Envío automático: PRIMER DÍA HÁBIL (lun–vie) de cada mes, desde las 16:35, con el IMS abierto ──
+function repInvPrimerDiaHabil(anio,mes){
+  for(var d=1;d<=7;d++){ var f=new Date(anio,mes,d); if(f.getDay()>=1&&f.getDay()<=5) return f; }
+}
+async function repInvAuto(){
+  if(REPINV_BUSY||REPINV_INTENTOS>=3) return;
+  if(!db||!user||user.role==='viewer') return;
+  var ahora=new Date();
+  if(ahora.getDate()!==repInvPrimerDiaHabil(ahora.getFullYear(),ahora.getMonth()).getDate()) return;
+  if(ahora.getHours()*60+ahora.getMinutes() < REPINV_HORA.h*60+REPINV_HORA.m) return;
+  var mesKey=ahora.getFullYear()+'-'+String(ahora.getMonth()+1).padStart(2,'0');
+  if(localStorage.getItem('repinv-'+REPINV_DOC)===mesKey) return;
+  REPINV_BUSY=true;
+  try{
+    var ref=db.collection('ims_config').doc(REPINV_DOC);
+    var snap=await ref.get(); var d=snap.exists?snap.data():{};
+    if(d.ultimoEnvioMes===mesKey){ localStorage.setItem('repinv-'+REPINV_DOC,mesKey); return; }
+    var dest=Array.isArray(d.destinatarios)?d.destinatarios:[];
+    if(!dest.length) return;
+    var prev=d.ultimoEnvioMes||'';
+    // Candado compartido: solo una computadora lo manda cada mes
+    var reservado=await db.runTransaction(async function(tx){
+      var s2=await tx.get(ref); var x=s2.exists?s2.data():{};
+      if(x.ultimoEnvioMes===mesKey) return false;
+      tx.set(ref,{ultimoEnvioMes:mesKey,reservadoEn:new Date().toISOString()},{merge:true});
+      return true;
+    });
+    if(!reservado){ localStorage.setItem('repinv-'+REPINV_DOC,mesKey); return; }
+    var ok=await repInvSend(dest);
+    if(ok>0){
+      localStorage.setItem('repinv-'+REPINV_DOC,mesKey);
+      await ref.set({ultimoEnvioEn:new Date().toISOString(),ultimoEnvioCorreos:ok},{merge:true});
+    } else {
+      REPINV_INTENTOS++;
+      await ref.set({ultimoEnvioMes:prev},{merge:true});   // libera el candado para reintentar
+    }
+  }catch(e){ console.error('repInvAuto:',e); }
+  finally{ REPINV_BUSY=false; }
+}
+function repInvStart(){
+  if(REPINV_TIMER) return;
+  setTimeout(repInvAuto,10000);
+  REPINV_TIMER=setInterval(repInvAuto,60000);
+}
+window.repInvStart=repInvStart;
 
 // ── ADMIN ──
 async function loadImsUsers() {
