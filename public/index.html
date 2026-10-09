@@ -11,7 +11,7 @@
 /* ===== CONTROL DE VERSION (evita que celulares/laptops se queden con version vieja en cache) =====
    Cada vez que subas un index.html actualizado, cambia este numero (ej: 20260711).
    El sistema detecta el cambio y recarga automaticamente la version nueva. */
-var APP_VERSION = "20261009a";
+var APP_VERSION = "20261009b";
 (function(){
   try{
     var key = 'ims_p4_version';
@@ -173,6 +173,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .ba-E{background:linear-gradient(135deg,#0a3d1f,var(--green2));color:#fff;border:1px solid rgba(0,230,118,.2)}
 .ba-S{background:linear-gradient(135deg,#3d0a0a,#cc2222);color:#fff;border:1px solid rgba(255,68,68,.2)}
 .ba-T{background:linear-gradient(135deg,#0d2a4d,var(--accent2));color:#fff;border:1px solid rgba(77,166,255,.2)}
+.ba-A{background:linear-gradient(135deg,#4a3000,#d98a00);color:#fff;border:1px solid rgba(245,166,35,.3)}
 .ba-i{font-size:20px}
 .scanzone{border:2px dashed var(--border2);border-radius:12px;padding:1.2rem;text-align:center;cursor:pointer;margin-bottom:.7rem;color:var(--text2)}
 .mf{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:1rem;display:none;position:relative;overflow:hidden;margin-bottom:.7rem}
@@ -181,8 +182,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .mf.t-E::before{background:var(--green)}
 .mf.t-S::before{background:var(--red)}
 .mf.t-T::before{background:var(--accent)}
+.mf.t-A::before{background:#f5a623}
 .mf-tipo{font-family:'Rajdhani',sans-serif;font-size:10px;letter-spacing:.06em;font-weight:600;margin-bottom:3px}
-.t-E .mf-tipo{color:var(--green)}.t-S .mf-tipo{color:var(--red)}.t-T .mf-tipo{color:var(--accent)}
+.t-E .mf-tipo{color:var(--green)}.t-S .mf-tipo{color:var(--red)}.t-T .mf-tipo{color:var(--accent)}.t-A .mf-tipo{color:#f5a623}
 .mf-pn{font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700}
 .mf-st{font-size:10px;color:var(--text2);margin-top:2px}
 .qrow{display:flex;align-items:center;gap:6px;margin:.7rem 0}
@@ -192,10 +194,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .ref-in{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:9px 11px;color:var(--text);font-size:12px;margin-bottom:.6rem;font-family:'DM Sans',sans-serif;outline:none}
 .ref-in::placeholder{color:var(--text3)}
 .btn-conf{width:100%;padding:13px;border-radius:9px;border:none;font-size:15px;font-weight:700;cursor:pointer;font-family:'Rajdhani',sans-serif;letter-spacing:.5px}
-.bc-E{background:var(--green2);color:#fff}.bc-S{background:#cc2222;color:#fff}.bc-T{background:var(--accent2);color:#fff}
+.bc-E{background:var(--green2);color:#fff}.bc-S{background:#cc2222;color:#fff}.bc-T{background:var(--accent2);color:#fff}.bc-A{background:#d98a00;color:#fff}
 .mc{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:.75rem .9rem;margin-bottom:.4rem;display:flex;gap:.6rem;align-items:flex-start}
 .mb{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
-.mb-E{background:rgba(0,230,118,.1)}.mb-S{background:rgba(255,68,68,.1)}.mb-T{background:rgba(77,166,255,.1)}
+.mb-E{background:rgba(0,230,118,.1)}.mb-S{background:rgba(255,68,68,.1)}.mb-T{background:rgba(77,166,255,.1)}.mb-A{background:rgba(245,166,35,.14)}
 .mc-t{font-family:'Rajdhani',sans-serif;font-size:12px;font-weight:600}
 .mc-d{font-size:9px;color:var(--text2);margin-top:1px}
 .mc-l{font-size:9px;color:var(--accent);margin-top:1px}
@@ -359,6 +361,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <button class="ba ba-E" onclick="initMov('E');showMovGuide('E')"><div class="ba-i">⬇️</div><span id="t-btnEntrada">ENTRADA</span></button>
       <button class="ba ba-S" onclick="initMov('S');showMovGuide('S')"><div class="ba-i">⬆️</div><span id="t-btnSalida">SALIDA</span></button>
       <button class="ba ba-T" onclick="initMov('T');showMovGuide('T')"><div class="ba-i">🔀</div><span id="t-btnTraslado">TRASLADO</span></button>
+      <button class="ba ba-A" onclick="initMov('A');showMovGuide('A')"><div class="ba-i">⚖️</div><span id="t-btnAjuste">AJUSTE</span></button>
     </div>
     <!-- Guía visual de movimiento -->
     <div id="movGuide" style="display:none;margin:.4rem 0 .6rem 0;padding:9px 12px;border-radius:10px;font-size:10px;line-height:1.6;border-left:3px solid var(--accent);background:rgba(77,166,255,.06)"></div>
@@ -408,6 +411,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
           <option value="Producción Terminada" id="t-optProdTerm">🎯 Prod. Terminada</option>
         </select>
       </div>
+      <div id="mfAJ" style="display:none">
+        <select class="loc-sel" id="mfAjDir">
+          <option value="-" id="t-ajRestar">➖ Restar del stock (el sistema tiene de más)</option>
+          <option value="+" id="t-ajSumar">➕ Sumar al stock (el sistema tiene de menos)</option>
+        </select>
+        <input class="ref-in" id="mfMotivo" autocomplete="off" placeholder="Motivo del ajuste (obligatorio)" data-t-ph="ph_motivoAjuste">
+      </div>
       <input class="ref-in" id="mfRef" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase" placeholder="Referencia / OC (opcional)" data-t-ph="ph_referencia">
       <button class="btn-conf" id="mfBtn" onclick="doMov()"><span id="t-btnConfirmar">✓ CONFIRMAR</span></button>
     </div>
@@ -444,6 +454,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         <div class="ft" onclick="setHistF('E',this)"><span id="t-histEntradas">⬇️ Entradas</span></div>
         <div class="ft" onclick="setHistF('S',this)"><span id="t-histSalidas">⬆️ Salidas</span></div>
         <div class="ft" onclick="setHistF('T',this)"><span id="t-histTraslados">🔀 Traslados</span></div>
+        <div class="ft" onclick="setHistF('A',this)"><span id="t-histAjustes">⚖️ Ajustes</span></div>
       </div>
       <button onclick="exportHistExcel()" style="padding:7px 12px;border-radius:8px;background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:11px;cursor:pointer;white-space:nowrap;flex-shrink:0">📊 Excel</button>
     </div>
@@ -1076,6 +1087,7 @@ async function pushMov(mov, delta, hItem) {
       actual: FV.increment(delta.actual||0),
       ubicacion: movItem.ubicacion || 'Almacén'
     };
+    if (delta.ajustes) upd.ajustes = FV.increment(delta.ajustes);   // Ajuste: contador aparte, no es entrada ni salida
     if (hItem) upd.historial = FV.arrayUnion(hItem);
     await db.collection('planta4_inventario').doc(_id).update(upd);
   } catch(e) {
@@ -1209,6 +1221,11 @@ const IMS_TRANSLATIONS = {
     t_btnEntrada: "ENTRADA",
     t_btnSalida: "SALIDA",
     t_btnTraslado: "TRASLADO",
+    t_btnAjuste: "AJUSTE",
+    t_histAjustes: "⚖️ Ajustes",
+    t_ajRestar: "➖ Restar del stock (el sistema tiene de más)",
+    t_ajSumar: "➕ Sumar al stock (el sistema tiene de menos)",
+    ph_motivoAjuste: "Motivo del ajuste (obligatorio)",
     t_escanearQR: "Escanear QR del material",
     t_tocaActivar: "Toca para activar la cámara",
     ph_buscaPN: "O busca el Part Number...",
@@ -1368,6 +1385,11 @@ const IMS_TRANSLATIONS = {
     t_btnEntrada: "IN",
     t_btnSalida: "OUT",
     t_btnTraslado: "TRANSFER",
+    t_btnAjuste: "ADJUST",
+    t_histAjustes: "⚖️ Adjustments",
+    t_ajRestar: "➖ Subtract from stock (system has too much)",
+    t_ajSumar: "➕ Add to stock (system has too little)",
+    ph_motivoAjuste: "Reason for the adjustment (required)",
     t_escanearQR: "Scan material QR",
     t_tocaActivar: "Tap to activate the camera",
     ph_buscaPN: "Or search for Part Number...",
@@ -1527,6 +1549,11 @@ const IMS_TRANSLATIONS = {
     t_btnEntrada: "입고",
     t_btnSalida: "출고",
     t_btnTraslado: "이송",
+    t_btnAjuste: "조정",
+    t_histAjustes: "⚖️ 조정",
+    t_ajRestar: "➖ 재고에서 차감 (시스템 재고가 많음)",
+    t_ajSumar: "➕ 재고에 가산 (시스템 재고가 적음)",
+    ph_motivoAjuste: "조정 사유 (필수)",
     t_escanearQR: "자재 QR 스캔",
     t_tocaActivar: "탭하여 카메라 활성화",
     ph_buscaPN: "또는 품번 검색...",
@@ -1923,6 +1950,7 @@ function openItem(idx) {
     '<div class="mrow"><span class="ml">'+t('lbl_invInicial')+'</span><span class="mv">'+(parseFloat(i.inicial)||0).toLocaleString()+'</span></div>'+
     '<div class="mrow"><span class="ml">'+t('lbl_entradas')+'</span><span class="mv" style="color:var(--green)">+'+(parseFloat(i.entradas)||0).toLocaleString()+'</span></div>'+
     '<div class="mrow"><span class="ml">'+t('lbl_salidas')+'</span><span class="mv" style="color:var(--red)">-'+(parseFloat(i.salidas)||0).toLocaleString()+'</span></div>'+
+    (parseFloat(i.ajustes)?'<div class="mrow"><span class="ml">⚖️ '+(TXT_AJ[IMS_LANG]||TXT_AJ.es).lbl+'</span><span class="mv" style="color:#f5a623">'+(parseFloat(i.ajustes)>0?'+':'')+(parseFloat(i.ajustes)||0).toLocaleString()+'</span></div>':'')+
     '<div class="mrow"><span class="ml">'+t('lbl_precioUnit2')+'</span><span class="mv">$'+(parseFloat(i.precio)||0).toFixed(4)+'</span></div>'+
     '<div class="mrow"><span class="ml">'+t('lbl_valorTotal')+'</span><span class="mv" style="color:var(--amber)">$'+((parseFloat(i.actual)||0)*(parseFloat(i.precio)||0)).toFixed(2)+'</span></div>'+
     '<div style="margin:.7rem 0 .3rem;font-size:10px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.05em" id="t-historialLbl">Historial</div>'+
@@ -1931,7 +1959,7 @@ function openItem(idx) {
   document.getElementById('modal').classList.add('show');
 }
 
-function tipoIcon(t) { return t==='E'?'⬇️':t==='S'?'⬆️':t==='T'?'🔀':'🏁'; }
+function tipoIcon(t) { return t==='E'?'⬇️':t==='S'?'⬆️':t==='T'?'🔀':t==='A'?'⚖️':'🏁'; }
 function fmtDate(d) { try{const dt=new Date(d);return dt.toLocaleDateString('es-MX',{day:'2-digit',month:'short'})+' '+dt.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}catch{return d} }
 function closeModal() { document.getElementById('modal').classList.remove('show'); }
 
@@ -1944,6 +1972,7 @@ function showMovGuide(t) {
     'S': '⬆️ <b>SALIDA</b> — Material consumido en producción.<br>❗ Disminuye el stock.<br>📍 Ej: Piezas usadas en S1, S2, etc. No se recuperan.',
     'T': '🔀 <b>TRASLADO</b> — Material que cambia de ubicación.<br>⚖️ El stock NO cambia, solo la ubicación.<br>📍 Ej: Almacén → S1 (envío) o S1 → Almacén (regreso sin usar).'
   };
+  info['A'] = (TXT_AJ[IMS_LANG] || TXT_AJ.es).guide;
   guide.innerHTML = info[t] || '';
   guide.style.display = 'block';
 }
@@ -1951,12 +1980,13 @@ window.showMovGuide = showMovGuide;
 
 function initMov(t) {
   movTipo = t;
-  const labels = {E:'⬇️ ENTRADA',S:'⬆️ SALIDA',T:'🔀 TRASLADO'};
+  const labels = {E:'⬇️ ENTRADA',S:'⬆️ SALIDA',T:'🔀 TRASLADO',A:'⚖️ '+(TXT_AJ[IMS_LANG]||TXT_AJ.es).title};
   const form = document.getElementById('movForm');
   form.className = 'mf show t-'+t;
   document.getElementById('mfTipo').textContent = labels[t];
   document.getElementById('mfBtn').className = 'btn-conf bc-'+t;
   document.getElementById('mfDW').style.display = (t==='E'||t==='T')?'block':'none';
+  document.getElementById('mfAJ').style.display = (t==='A')?'block':'none';
   if (selIdx===null) { document.getElementById('mfPN').textContent='← Selecciona un Part Number'; document.getElementById('mfSt').textContent=''; }
 }
 
@@ -2020,6 +2050,7 @@ async function doMovInner() {
   const qty = parseInt(document.getElementById('mfQty').value)||0;
   if (qty<=0) { toast('Cantidad inválida','err'); return; }
   const item = items[selIdx];
+  if (movTipo==='A') { await doAjuste(item, qty); return; }   // Ajuste: flujo aparte, no cuenta como consumo
   if (movTipo==='S'&&qty>item.actual) { toast('Stock insuficiente: '+item.actual.toLocaleString()+' disponibles','err'); return; }
   const dest = document.getElementById('mfDest').value;
   const ref = document.getElementById('mfRef').value.trim();
@@ -2037,16 +2068,19 @@ async function doMovInner() {
     palletInfo = {id:scanPallet.id, maq:rc.maq||''};
     scanPallet=null; // ya reclamado: no volver a marcarlo después
   } else if ((movTipo==='E' || movTipo==='S') && esTerminadoLinea(item.desc) && await esPiezaDeLinea(item.pn)) {
-    const T={es:'🔒 Bloqueado: este producto terminado de línea solo se maneja escaneando el QR del pallet. No se permite captura manual.',en:'🔒 Locked: this finished line product can only be handled by scanning the pallet QR. Manual entry is not allowed.',ko:'🔒 잠김: 라인 완제품은 팔레트 QR 스캔으로만 처리할 수 있습니다. 수동 입력은 허용되지 않습니다.'};
-    if (movTipo==='E') { alert(T[IMS_LANG]||T.es); return; }
-    const okClave = await pedirClaveManual(item.pn, qty, movTipo);
-    if (!okClave) return;
-    claveManualOk = true;
+    // Entrada: solo por QR del pallet. Salida: el único descuento de producción es el envío a ShipQR (desde el MES).
+    // Si el stock no coincide con el físico, se corrige con AJUSTE (contraseña + motivo), que no cuenta como consumo.
+    const T={
+      E:{es:'🔒 Bloqueado: este producto terminado de línea solo se recibe escaneando el QR del pallet. No se permite captura manual.',en:'🔒 Locked: this finished line product can only be received by scanning the pallet QR. Manual entry is not allowed.',ko:'🔒 잠김: 라인 완제품은 팔레트 QR 스캔으로만 입고할 수 있습니다. 수동 입력은 허용되지 않습니다.'},
+      S:{es:'🔒 Bloqueado: el descuento de este producto lo hace SOLO el envío a ShipQR. No se permite salida manual.\n\nSi el stock no coincide con el conteo físico, usa AJUSTE (contraseña + motivo).',en:'🔒 Locked: this product is deducted ONLY by the ShipQR shipment. Manual removal is not allowed.\n\nIf the stock does not match the physical count, use ADJUST (password + reason).',ko:'🔒 잠김: 이 제품의 차감은 ShipQR 출하로만 이루어집니다. 수동 출고는 허용되지 않습니다.\n\n재고가 실사와 다르면 조정(비밀번호 + 사유)을 사용하세요.'}
+    };
+    alert((T[movTipo]||T.E)[IMS_LANG] || (T[movTipo]||T.E).es); return;
   }
   const antes = {entradas:item.entradas, salidas:item.salidas, actual:item.actual, ubicacion:item.ubicacion};
   const delta = {entradas:0, salidas:0, actual:0};
   if (movTipo==='E') { item.entradas+=qty; item.actual+=qty; delta.entradas=qty; delta.actual=qty; }
-  else { item.salidas+=qty; item.actual-=qty; delta.salidas=qty; delta.actual=-qty; }  // S y T (igual que antes)
+  else if (movTipo==='T') { /* Traslado: solo cambia la ubicación; el stock NO cambia (como indica la guía) */ }
+  else { item.salidas+=qty; item.actual-=qty; delta.salidas=qty; delta.actual=-qty; }  // S
   if (movTipo==='E'||movTipo==='T') item.ubicacion = dest;
   const hItem = {tipo:movTipo,fecha:new Date().toISOString(),qty,loc:item.ubicacion,user:user.name,ref};
   if (!item.historial) item.historial=[];
@@ -2362,20 +2396,63 @@ async function esPiezaDeLinea(pn){
 /* 🔒 CANDADO: entrada MANUAL de piezas de línea (GH69) sin etiqueta. Pide contraseña de autorización.
    Para cambiar la contraseña, edita solo la línea de abajo. */
 const CLAVE_ENTRADA_MANUAL = 'mes2026';
+/* ⚖️ AJUSTE de inventario: corrige el stock contra el conteo físico. Pide contraseña + motivo, queda en el historial
+   como movimiento aparte (tipo 'A') y NO cuenta como entrada ni como consumo. */
+const TXT_AJ = {
+  es:{title:'AJUSTE',guide:'⚖️ <b>AJUSTE</b> — Corrige el stock contra el conteo físico.<br>🔑 Pide contraseña y motivo; queda registrado con tu usuario.<br>⚖️ NO cuenta como entrada ni como consumo.',motivoBad:'Escribe el motivo del ajuste (mínimo 5 letras)',stockInsuf:'Stock insuficiente para restar. Disponibles: ',confirm:function(pn,s,q,a,d){return 'Ajuste de inventario\n\n'+pn+'\nStock actual: '+a.toLocaleString()+'\nAjuste: '+s+q.toLocaleString()+'\nStock nuevo: '+d.toLocaleString()+'\n\n¿Confirmas?';},ok:'⚖️ Ajuste',fail:'❌ NO se registró el ajuste.\n\n',lbl:'Ajustes'},
+  en:{title:'ADJUST',guide:'⚖️ <b>ADJUST</b> — Corrects the stock against the physical count.<br>🔑 Requires password and reason; logged with your user.<br>⚖️ Does NOT count as an entry or as consumption.',motivoBad:'Write the reason for the adjustment (at least 5 letters)',stockInsuf:'Not enough stock to subtract. Available: ',confirm:function(pn,s,q,a,d){return 'Inventory adjustment\n\n'+pn+'\nCurrent stock: '+a.toLocaleString()+'\nAdjustment: '+s+q.toLocaleString()+'\nNew stock: '+d.toLocaleString()+'\n\nConfirm?';},ok:'⚖️ Adjustment',fail:'❌ The adjustment was NOT recorded.\n\n',lbl:'Adjustments'},
+  ko:{title:'조정',guide:'⚖️ <b>조정</b> — 실사 수량에 맞게 재고를 수정합니다.<br>🔑 비밀번호와 사유가 필요하며 사용자와 함께 기록됩니다.<br>⚖️ 입고나 소비로 계산되지 않습니다.',motivoBad:'조정 사유를 입력하세요 (5자 이상)',stockInsuf:'차감할 재고가 부족합니다. 가용: ',confirm:function(pn,s,q,a,d){return '재고 조정\n\n'+pn+'\n현재 재고: '+a.toLocaleString()+'\n조정: '+s+q.toLocaleString()+'\n새 재고: '+d.toLocaleString()+'\n\n확인하시겠습니까?';},ok:'⚖️ 조정',fail:'❌ 조정이 기록되지 않았습니다.\n\n',lbl:'조정'}
+};
+async function doAjuste(item, qty){
+  const L = TXT_AJ[IMS_LANG] || TXT_AJ.es;
+  const signo = (document.getElementById('mfAjDir').value==='+') ? 1 : -1;
+  const motivo = document.getElementById('mfMotivo').value.trim();
+  const actual0 = parseFloat(item.actual)||0;
+  if (motivo.length < 5) { toast(L.motivoBad,'err'); return; }
+  if (signo<0 && qty>actual0) { toast(L.stockInsuf+actual0.toLocaleString(),'err'); return; }
+  if (!(await pedirClaveManual(item.pn, qty, 'A'))) return;
+  if (!confirm(L.confirm(item.pn+' · '+item.desc, signo>0?'+':'-', qty, actual0, actual0+signo*qty))) return;
+  const antes = {actual:item.actual, ajustes:item.ajustes};
+  const delta = {entradas:0, salidas:0, actual:signo*qty, ajustes:signo*qty};
+  item.actual = actual0 + signo*qty;
+  item.ajustes = (parseFloat(item.ajustes)||0) + signo*qty;
+  const iso = new Date().toISOString();
+  const refTxt = 'AJUSTE · '+motivo;
+  const hItem = {tipo:'A',fecha:iso,qty,loc:item.ubicacion,user:user.name,ref:refTxt,signo:signo>0?'+':'-'};
+  if (!item.historial) item.historial = [];
+  item.historial.push(hItem);
+  const mov = {tipo:'A',pn:item.pn,desc:item.desc,familia:item.familia,qty,fecha:iso,user:user.name,ref:refTxt,motivo:motivo,signo:signo>0?'+':'-',stock:item.actual,loc:item.ubicacion,origen:'AJUSTE',autorizado:true};
+  movs.unshift(mov);
+  saveLocal();
+  const res = await pushMov(mov, delta, hItem);
+  if (!res.ok) {
+    item.actual = antes.actual; item.ajustes = antes.ajustes;
+    item.historial.pop(); movs.shift(); saveLocal();
+    updateDash(); renderInv(); renderHist(); renderLocMap();
+    alert(L.fail+res.err);
+    return;
+  }
+  updateDash(); renderInv(); renderHist(); renderLocMap();
+  toast(L.ok+': '+(signo>0?'+':'-')+qty.toLocaleString()+' · '+item.pn,'ok');
+  selIdx = null;
+  document.getElementById('movForm').className = 'mf';
+  document.getElementById('mfMotivo').value = '';
+  document.getElementById('mfRef').value = '';
+}
 const TXT_CLAVE = {
-  es:{tS:'🔒 Salida manual bloqueada',mS:(pn,q)=>'La parte '+pn+' ('+q.toLocaleString()+' pzs) viene de línea. Descontarla a mano requiere autorización. Ingresa la contraseña.',t:'🔒 Entrada manual bloqueada',m:(pn,q)=>'La parte '+pn+' ('+q.toLocaleString()+' pzs) viene de línea y no tiene etiqueta escaneada. Lo correcto es escanear la etiqueta del pallet. Si es un caso especial, pide autorización e ingresa la contraseña.',ph:'Contraseña de autorización',ok:'Autorizar',cancel:'Cancelar',bad:'Contraseña incorrecta'},
-  en:{tS:'🔒 Manual removal locked',mS:(pn,q)=>'Part '+pn+' ('+q.toLocaleString()+' pcs) comes from the line. Deducting it by hand requires authorization. Enter the password.',t:'🔒 Manual entry locked',m:(pn,q)=>'Part '+pn+' ('+q.toLocaleString()+' pcs) comes from the line and its label was not scanned. The correct way is to scan the pallet label. For a special case, ask for authorization and enter the password.',ph:'Authorization password',ok:'Authorize',cancel:'Cancel',bad:'Wrong password'},
-  ko:{tS:'🔒 수동 출고 잠김',mS:(pn,q)=>'부품 '+pn+' ('+q.toLocaleString()+' pcs)은(는) 라인에서 온 것입니다. 수동 차감은 승인이 필요합니다. 비밀번호를 입력하세요.',t:'🔒 수동 입고 잠김',m:(pn,q)=>'부품 '+pn+' ('+q.toLocaleString()+' pcs)은(는) 라인에서 온 것이며 라벨이 스캔되지 않았습니다. 팔레트 라벨을 스캔하는 것이 올바른 방법입니다. 예외 상황이면 승인을 받고 비밀번호를 입력하세요.',ph:'승인 비밀번호',ok:'승인',cancel:'취소',bad:'비밀번호가 틀렸습니다'}
+  es:{tS:'🔒 Salida manual bloqueada',mS:(pn,q)=>'La parte '+pn+' ('+q.toLocaleString()+' pzs) viene de línea. Descontarla a mano requiere autorización. Ingresa la contraseña.',t:'🔒 Entrada manual bloqueada',m:(pn,q)=>'La parte '+pn+' ('+q.toLocaleString()+' pzs) viene de línea y no tiene etiqueta escaneada. Lo correcto es escanear la etiqueta del pallet. Si es un caso especial, pide autorización e ingresa la contraseña.',tA:'⚖️ Ajuste de inventario',mA:(pn,q)=>'Vas a ajustar '+pn+' ('+q.toLocaleString()+' pzs). Un ajuste corrige el stock contra el conteo físico y no cuenta como consumo. Ingresa la contraseña de autorización.',ph:'Contraseña de autorización',ok:'Autorizar',cancel:'Cancelar',bad:'Contraseña incorrecta'},
+  en:{tS:'🔒 Manual removal locked',mS:(pn,q)=>'Part '+pn+' ('+q.toLocaleString()+' pcs) comes from the line. Deducting it by hand requires authorization. Enter the password.',t:'🔒 Manual entry locked',m:(pn,q)=>'Part '+pn+' ('+q.toLocaleString()+' pcs) comes from the line and its label was not scanned. The correct way is to scan the pallet label. For a special case, ask for authorization and enter the password.',tA:'⚖️ Inventory adjustment',mA:(pn,q)=>'You are about to adjust '+pn+' ('+q.toLocaleString()+' pcs). An adjustment corrects the stock against the physical count and does not count as consumption. Enter the authorization password.',ph:'Authorization password',ok:'Authorize',cancel:'Cancel',bad:'Wrong password'},
+  ko:{tS:'🔒 수동 출고 잠김',mS:(pn,q)=>'부품 '+pn+' ('+q.toLocaleString()+' pcs)은(는) 라인에서 온 것입니다. 수동 차감은 승인이 필요합니다. 비밀번호를 입력하세요.',t:'🔒 수동 입고 잠김',m:(pn,q)=>'부품 '+pn+' ('+q.toLocaleString()+' pcs)은(는) 라인에서 온 것이며 라벨이 스캔되지 않았습니다. 팔레트 라벨을 스캔하는 것이 올바른 방법입니다. 예외 상황이면 승인을 받고 비밀번호를 입력하세요.',tA:'⚖️ 재고 조정',mA:(pn,q)=>'부품 '+pn+' ('+q.toLocaleString()+' pcs)을(를) 조정하려고 합니다. 조정은 실사 수량에 맞게 재고를 수정하며 소비로 계산되지 않습니다. 승인 비밀번호를 입력하세요.',ph:'승인 비밀번호',ok:'승인',cancel:'취소',bad:'비밀번호가 틀렸습니다'}
 };
 function pedirClaveManual(pn, qty, tipo){
   return new Promise(function(resolve){
     const L = TXT_CLAVE[IMS_LANG] || TXT_CLAVE.es;
-    const esS = (tipo==='S');
+    const esS = (tipo==='S'), esA = (tipo==='A');
     const ov = document.createElement('div');
     ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
     ov.innerHTML = '<div style="background:#171a23;border:1px solid #f5a623;border-radius:14px;padding:20px;max-width:380px;width:100%;color:#e8eaf0;font-family:inherit">'
-      + '<div style="font-size:17px;font-weight:700;margin-bottom:8px">'+(esS?L.tS:L.t)+'</div>'
-      + '<div style="font-size:13px;color:#aab;margin-bottom:12px;line-height:1.4">'+(esS?L.mS(pn,qty):L.m(pn,qty))+'</div>'
+      + '<div style="font-size:17px;font-weight:700;margin-bottom:8px">'+(esA?L.tA:(esS?L.tS:L.t))+'</div>'
+      + '<div style="font-size:13px;color:#aab;margin-bottom:12px;line-height:1.4">'+(esA?L.mA(pn,qty):(esS?L.mS(pn,qty):L.m(pn,qty)))+'</div>'
       + '<input id="claveManualIn" type="password" autocomplete="off" placeholder="'+L.ph+'" style="width:100%;box-sizing:border-box;padding:11px;border-radius:8px;border:1px solid #3a4054;background:#0f1117;color:#fff;font-size:15px">'
       + '<div id="claveManualErr" style="color:#ff6b6b;font-size:12px;min-height:16px;margin-top:6px"></div>'
       + '<div style="display:flex;gap:8px;margin-top:8px"><button id="claveManualNo" style="flex:1;padding:11px;border-radius:8px;border:1px solid #3a4054;background:transparent;color:#e8eaf0;cursor:pointer">'+L.cancel+'</button>'
@@ -2508,10 +2585,10 @@ function movHTML(m) {
   let badge='';
   if (m.origen==='LINEA') badge=' · <span style="color:var(--green)">📦 Etiqueta de línea'+(m.maq?' '+m.maq:'')+' · '+(m.pallet||'')+'</span>';
   else if (tipoNorm==='E' && /^GH69/i.test(m.pn||'') && !ref) badge=' · <span style="color:var(--red)">⚠️ sin etiqueta de línea</span>';
-  const icons={E:'⬇️',S:'⬆️',T:'🔀',INI:'🏁'};
-  const cols={E:'mb-E',S:'mb-S',T:'mb-T',INI:'mb-T'};
-  const qc={E:'color:var(--green)',S:'color:var(--red)',T:'color:var(--accent)'};
-  const signs={E:'+',S:'-',T:'→'};
+  const icons={E:'⬇️',S:'⬆️',T:'🔀',A:'⚖️',INI:'🏁'};
+  const cols={E:'mb-E',S:'mb-S',T:'mb-T',A:'mb-A',INI:'mb-T'};
+  const qc={E:'color:var(--green)',S:'color:var(--red)',T:'color:var(--accent)',A:'color:#f5a623'};
+  const signs={E:'+',S:'-',T:'→',A:(m.signo==='+'?'+':'-')};
   return '<div class="mc"><div class="mb '+(cols[tipoNorm]||'mb-T')+'">'+(icons[tipoNorm]||'🔄')+'</div><div style="flex:1;min-width:0"><div class="mc-t">'+(m.pn||'–')+'</div><div class="mc-d">'+(m.desc||'')+' · '+(m.familia||'')+' · '+usr+'</div><div class="mc-l">📍 '+loc+' · '+fmtDate(m.fecha)+(ref?' · '+ref:'')+badge+'</div></div><div class="mc-q" style="'+(qc[tipoNorm]||'')+'">'+(signs[tipoNorm]||'')+qty+'</div></div>';
 }
 
@@ -2533,7 +2610,7 @@ function exportHistExcel() {
   }
   if (!f.length) { toast('No hay movimientos para exportar con el filtro actual', 'warn'); return; }
 
-  const tipoLabel = {E:'Entrada',S:'Salida',T:'Traslado',INI:'Inv. Inicial'};
+  const tipoLabel = {E:'Entrada',S:'Salida',T:'Traslado',A:'Ajuste',INI:'Inv. Inicial'};
   const rows = [['Tipo','PN','Descripción','Familia','Cantidad','Ubicación','Usuario','Referencia','Fecha']];
   f.forEach(function(m){
     const tipoNorm = m.tipo==='OUT' ? 'S' : m.tipo==='IN' ? 'E' : m.tipo;
@@ -2542,7 +2619,7 @@ function exportHistExcel() {
       m.pn||'',
       m.desc||'',
       m.familia||'',
-      (m.qty!==undefined && m.qty!==null) ? m.qty : (m.cantidad||0),
+      (function(){ const q=(m.qty!==undefined && m.qty!==null) ? m.qty : (m.cantidad||0); return (tipoNorm==='A' && m.signo==='-') ? -q : q; })(),
       m.loc || m.ubicacion || '',
       m.user || m.usuario || '',
       m.ref || m.referencia || '',
