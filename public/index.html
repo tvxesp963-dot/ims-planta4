@@ -11,7 +11,7 @@
 /* ===== CONTROL DE VERSION (evita que celulares/laptops se queden con version vieja en cache) =====
    Cada vez que subas un index.html actualizado, cambia este numero (ej: 20260711).
    El sistema detecta el cambio y recarga automaticamente la version nueva. */
-var APP_VERSION = "20261013a";
+var APP_VERSION = "20261014a";
 (function(){
   try{
     var key = 'ims_p4_version';
@@ -935,7 +935,7 @@ window.saveEdit = saveEdit;
 
 async function deleteFromEdit() {
   const idx = _findEditIdx();
-  if (idx === undefined || idx === null) return;
+  if (idx === undefined || idx === null || !items[idx]) return;
   if (!user || user.role !== 'admin') { toast('Solo admin puede eliminar','err'); return; }
   const it = items[idx];
   var nombre = (it.pn||'') + ' · ' + (it.desc||'');
@@ -945,51 +945,77 @@ async function deleteFromEdit() {
   msg += '\n\nTambién se borrarán todos sus movimientos del historial.\n\nEsta acción NO se puede deshacer.';
   if (!confirm(msg)) return;
 
+  // FIX: aviso inmediato y botón bloqueado (antes la ventana parecía congelada sin avisar nada)
+  var btnDel = document.getElementById('t-btnEliminar');
+  var txtDel = btnDel ? btnDel.textContent : '';
+  if (btnDel) { btnDel.disabled = true; btnDel.textContent = '⏳ Eliminando...'; }
+  toast('⏳ Eliminando, espera...', 'info');
+  // Espera máxima por operación: nunca se queda esperando para siempre
+  var esperar = function(p, ms){ return Promise.race([p, new Promise(function(res){ setTimeout(function(){ res('timeout'); }, ms || 20000); })]); };
+  var T0 = Date.now(), tDoc = 0, tPant = 0;
+  var docId = it._docId || getDocId(it.pn, it.desc);
+  var pnU = (it.pn||'').toUpperCase(), descU = (it.desc||'').toUpperCase();
+  // Si queda otro renglón con el mismo PN+Desc (duplicado), NO se tocan los movimientos
+  var quedaOtro = items.some(function(x){
+    return x !== it && (x._docId || getDocId(x.pn,x.desc)) !== docId &&
+      (x.pn||'').toUpperCase() === pnU && (x.desc||'').toUpperCase() === descU;
+  });
+  _blockSnapshot = true; // evita que la lista en vivo se redibuje varias veces mientras se borra
+  var avisoDoc = '';
   try {
-    var docId = it._docId || getDocId(it.pn, it.desc);
-    // Borrar SOLO este documento
-    if (db) await _withTimeout(db.collection('planta4_inventario').doc(docId).delete());
-    // Si queda otro renglón con el mismo PN+Desc (duplicado), NO se tocan los movimientos
-    var quedaOtro = items.some(function(x){
-      return x !== it && (x._docId || getDocId(x.pn,x.desc)) !== docId &&
-        (x.pn||'').toUpperCase() === (it.pn||'').toUpperCase() &&
-        (x.desc||'').toUpperCase() === (it.desc||'').toUpperCase();
-    });
-    var bm = 0;
-    if (db && !quedaOtro) {
-      // FIX: ya no se descarga TODA la colección de movimientos ni se borra uno por uno
-      // (eso dejaba la pantalla "ciclando"). Se buscan solo los de este PN y se borran por lotes,
-      // con tiempo máximo de espera. Si falla, la parte igual queda eliminada.
-      try {
-        var snap = await _withTimeout(db.collection('planta4_movimientos').where('pn','==',it.pn).get(), 12000);
-        var docsMov = snap.docs.filter(function(d){
-          return ((d.data().desc||'').toUpperCase()) === ((it.desc||'').toUpperCase());
-        });
-        for (var k = 0; k < docsMov.length; k += 400) {
-          var bMov = db.batch();
-          docsMov.slice(k, k + 400).forEach(function(d){ bMov.delete(d.ref); });
-          await _withTimeout(bMov.commit(), 12000);
-        }
-        bm = docsMov.length;
-      } catch(eMov) { console.error('deleteFromEdit movimientos:', eMov); toast('Parte eliminada; movimientos no borrados: ' + eMov.message, 'warn'); }
+    // 1) Borrar SOLO este documento (lo único que hay que esperar)
+    if (db) {
+      var r1 = await esperar(db.collection('planta4_inventario').doc(docId).delete());
+      if (r1 === 'timeout') avisoDoc = ' (Firebase tardó en confirmar; se aplicará al reconectar)';
     }
-    // Borrar local
+    tDoc = Date.now() - T0;
+    // 2) Quitar de la pantalla y cerrar la ventana YA (no se espera a los movimientos)
     var pos = items.findIndex(function(x){ return (x._docId || getDocId(x.pn,x.desc)) === docId; });
     if (pos >= 0) items.splice(pos, 1);
     if (!quedaOtro) movs = movs.filter(function(m){
-      return !((m.pn||'').toUpperCase()===(it.pn||'').toUpperCase() &&
-               (m.desc||'').toUpperCase()===(it.desc||'').toUpperCase());
+      return !((m.pn||'').toUpperCase()===pnU && (m.desc||'').toUpperCase()===descU);
     });
     saveLocal();
     closeEdit();
+    var tP = Date.now();
     renderInv(); updateDash();
     if (typeof renderHist === 'function') renderHist();
     if (typeof renderLocMap === 'function') renderLocMap();
-    toast('🗑️ Eliminado · ' + bm + ' mov(s) borrados', 'ok');
+    tPant = Date.now() - tP;
+    toast('🗑️ Parte eliminada' + avisoDoc + (db && !quedaOtro ? ' · borrando movimientos...' : ''), 'ok');
   } catch(e) {
     console.error('deleteFromEdit:', e);
-    toast('Error: ' + e.message, 'err');
+    toast('Error al eliminar: ' + e.message, 'err');
+    if (btnDel) { btnDel.disabled = false; btnDel.textContent = txtDel; }
+    setTimeout(function(){ _blockSnapshot = false; }, 1000);
+    return;
   }
+  if (btnDel) { btnDel.disabled = false; btnDel.textContent = txtDel; }
+  // 3) Movimientos del historial: se borran DESPUÉS, por lotes y sin bloquear la pantalla
+  var bm = 0, avisoMov = '', tMov0 = Date.now();
+  try {
+    if (db && !quedaOtro) {
+      var snap = await esperar(db.collection('planta4_movimientos').where('pn','==',it.pn).get(), 25000);
+      if (snap === 'timeout') { avisoMov = ' · movimientos: sin respuesta de Firebase'; }
+      else {
+        var docsMov = snap.docs.filter(function(d){ return ((d.data().desc||'').toUpperCase()) === descU; });
+        for (var k = 0; k < docsMov.length; k += 400) {
+          var bMov = db.batch();
+          docsMov.slice(k, k + 400).forEach(function(d){ bMov.delete(d.ref); });
+          var rb = await esperar(bMov.commit(), 25000);
+          if (rb === 'timeout') { avisoMov = ' · algunos movimientos tardaron en confirmarse'; break; }
+        }
+        bm = docsMov.length;
+      }
+    }
+  } catch(eMov) {
+    console.error('deleteFromEdit movimientos:', eMov);
+    avisoMov = ' · movimientos no borrados: ' + eMov.message;
+  }
+  var seg = function(ms){ return (ms/1000).toFixed(1) + 's'; };
+  console.log('deleteFromEdit tiempos → parte:', seg(tDoc), '| pantalla:', seg(tPant), '| movimientos:', seg(Date.now()-tMov0), '| total:', seg(Date.now()-T0));
+  toast('🗑️ Eliminado · ' + bm + ' mov(s) borrados' + avisoMov + ' · ' + seg(Date.now()-T0) + ' (parte ' + seg(tDoc) + ', pantalla ' + seg(tPant) + ')', avisoMov ? 'warn' : 'ok');
+  setTimeout(function(){ _blockSnapshot = false; }, 3000);
 }
 window.deleteFromEdit = deleteFromEdit;
 // ── FIREBASE ──
