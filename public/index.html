@@ -11,7 +11,7 @@
 /* ===== CONTROL DE VERSION (evita que celulares/laptops se queden con version vieja en cache) =====
    Cada vez que subas un index.html actualizado, cambia este numero (ej: 20260711).
    El sistema detecta el cambio y recarga automaticamente la version nueva. */
-var APP_VERSION = "20261016b";
+var APP_VERSION = "20261014a";
 (function(){
   try{
     var key = 'ims_p4_version';
@@ -1151,90 +1151,6 @@ async function liberarPallet(id){
 // ── AUTH ──
 
 
-/* ── MEDIO PROCESO: vista previa + descuento de Sheet y Chip Board al RECIBIR el pallet ── */
-const COMP_MEDIO = {
-  'GIFT BOX (TOP)': ['SHEET TOP BOX','CHIP BOARD TOP (RANURADO)'],
-  'LOWER BOX (BOTTOM)': ['SHEET LOWER BOX (BOTTOM)','CHIP BOARD BOTTOM (RANURADO)']
-};
-var _bomMedioCache = null;
-async function bomActivoMedio(){
-  if (_bomMedioCache && (Date.now() - _bomMedioCache.t) < 600000) return _bomMedioCache.bom;
-  const d = await db.collection('bom_simulator_p4').doc('bom_activo').get();
-  const bom = d.exists ? JSON.parse(d.data().bom || '[]') : [];
-  _bomMedioCache = {t: Date.now(), bom: bom};
-  return bom;
-}
-/* Calcula el plan SIN tocar nada. */
-async function planComponentesMedio(item, qty, modelo){
-  const nU = x => String(x || '').trim().toUpperCase();
-  const dsc0 = nU(item.desc);
-  const plan = {aplica: false, comps: [], problemas: [], modelo: modelo || ''};
-  const todos = [].concat(COMP_MEDIO['GIFT BOX (TOP)'], COMP_MEDIO['LOWER BOX (BOTTOM)']);
-  if (todos.indexOf(dsc0) >= 0) {
-    plan.aplica = true;
-    plan.problemas.push('Estás recibiendo un pallet de medio proceso sobre "' + item.desc + '" (es un componente). Cancela y selecciona Gift Box (Top) o Lower Box (Bottom).');
-    return plan;
-  }
-  const lista = COMP_MEDIO[dsc0];
-  if (!lista) return plan;
-  plan.aplica = true;
-  if (!nU(modelo)) { plan.problemas.push('El pallet no trae modelo: NO se puede saber qué Sheet/Chip Board descontar.'); return plan; }
-  let bom;
-  try { bom = await bomActivoMedio(); }
-  catch(e) { plan.problemas.push('No se pudo leer el BOM (' + e.message + '): NO se descontarán Sheet ni Chip Board.'); return plan; }
-  for (const dsc of lista) {
-    const fila = bom.find(b => b.pn && b.sm && nU(b.sm) === nU(modelo) && nU(b.desc) === dsc);
-    if (!fila) { plan.problemas.push(dsc + ': no está en el BOM del modelo ' + modelo + ' (NO se descontará).'); continue; }
-    const it = items.find(i => nU(i.pn) === nU(fila.pn) && nU(i.desc) === dsc);
-    if (!it) { plan.problemas.push(fila.pn + ' ' + dsc + ': no existe en el IMS (NO se descontará).'); continue; }
-    const a0 = parseFloat(it.actual) || 0;
-    const aplicado = Math.min(qty, Math.max(0, a0));
-    plan.comps.push({it: it, fila: fila, dsc: dsc, antes: a0, aplicado: aplicado, faltante: qty - aplicado});
-    if (qty - aplicado > 0) plan.problemas.push(fila.pn + ' ' + dsc + ': solo hay ' + a0.toLocaleString() + ' y se necesitan ' + qty.toLocaleString() + ' (quedará en 0, faltan ' + (qty - aplicado).toLocaleString() + ').');
-  }
-  return plan;
-}
-function textoPlanMedio(item, qty, palletId, plan){
-  const a = parseFloat(item.actual) || 0;
-  let t = '📦 RECEPCIÓN DE MEDIO PROCESO\nPallet: ' + palletId + (plan.modelo ? '  ·  Modelo: ' + plan.modelo : '') + '\n\n';
-  t += '➕ ENTRA:\n   ' + item.pn + ' · ' + item.desc + '   +' + qty.toLocaleString() + '   (' + a.toLocaleString() + ' → ' + (a + qty).toLocaleString() + ')\n\n';
-  t += '➖ SE DESCUENTA (componentes ya consumidos al fabricar este medio proceso):\n';
-  if (!plan.comps.length) t += '   (nada)\n';
-  plan.comps.forEach(c => { t += '   ' + c.fila.pn + ' · ' + c.dsc + '   -' + c.aplicado.toLocaleString() + '   (' + c.antes.toLocaleString() + ' → ' + (c.antes - c.aplicado).toLocaleString() + ')\n'; });
-  t += '\n✋ NO se toca ningún otro material.\n';
-  if (plan.problemas.length) t += '\n⚠️ AVISOS:\n - ' + plan.problemas.join('\n - ') + '\n';
-  t += '\n¿Confirmar? (Cancelar = no se registra nada y el pallet sigue PENDIENTE)';
-  return t;
-}
-/* Ejecuta el plan ya confirmado. Devuelve '' si todo bien o un mensaje de aviso. */
-async function ejecutarComponentesMedio(plan, qty, palletId){
-  const fallos = [];
-  const iso = new Date().toISOString();
-  for (const c of plan.comps) {
-    const it = c.it;
-    const a0 = parseFloat(it.actual) || 0;
-    const aplicado = Math.min(qty, Math.max(0, a0));
-    const faltante = qty - aplicado;
-    const antes = {salidas: it.salidas, actual: it.actual};
-    it.salidas = (parseFloat(it.salidas) || 0) + qty;
-    it.actual = a0 - aplicado;
-    const refTxt = 'MEDIO PROCESO · ' + palletId;
-    const hItem = {tipo: 'S', fecha: iso, qty: qty, loc: it.ubicacion || 'Almacén', user: user.name, ref: refTxt};
-    if (!it.historial) it.historial = [];
-    it.historial.push(hItem);
-    const mov = {tipo: 'S', pn: it.pn, desc: it.desc, familia: it.familia, qty: qty, fecha: iso, user: user.name, ref: refTxt, stock: it.actual, loc: it.ubicacion || 'Almacén', origen: 'MEDIO_PROCESO', pallet: palletId, faltante: faltante};
-    movs.unshift(mov);
-    saveLocal();
-    const res = await pushMov(mov, {entradas: 0, salidas: qty, actual: -aplicado}, hItem);
-    if (!res.ok) {
-      it.salidas = antes.salidas; it.actual = antes.actual; it.historial.pop(); movs.shift(); saveLocal();
-      fallos.push(c.fila.pn + ' (' + c.dsc + '): ' + res.err);
-    }
-  }
-  if (fallos.length) return '⚠️ La entrada SÍ se registró, pero NO se pudo descontar:\n- ' + fallos.join('\n- ') + '\n\nCorrígelo con un AJUSTE en Movimientos.';
-  return '';
-}
-
 function checkViewerPass() {
   const pass = document.getElementById('viewerPass').value;
   const err = document.getElementById('viewerErr');
@@ -2159,7 +2075,7 @@ async function reclamarPallet(){
         if(st==='RECEIVED') return {ok:false,msg:'Pallet '+scanPallet.id+' YA fue escaneado'+(d.data().recibidoFecha?' el '+new Date(d.data().recibidoFecha).toLocaleString():'')+(d.data().recibidoPor?' por '+d.data().recibidoPor:'')+' — no se registra de nuevo'};
         if(st==='VOID') return {ok:false,msg:'Pallet '+scanPallet.id+' está ANULADO — no se puede recibir'};
         tx.update(ref,{status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora});
-        return {ok:true,maq:d.data().maquina||'',modelo:d.data().modelo||''};
+        return {ok:true,maq:d.data().maquina||''};
       } else {
         tx.set(ref,{status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora,creadoDesdeIMS:true});
       }
@@ -2178,7 +2094,7 @@ async function doMovInner() {
   if (movTipo==='S'&&qty>item.actual) { toast('Stock insuficiente: '+item.actual.toLocaleString()+' disponibles','err'); return; }
   const dest = document.getElementById('mfDest').value;
   const ref = document.getElementById('mfRef').value.trim();
-  let palletInfo = null, claveManualOk = false, planMedio = null;
+  let palletInfo = null, claveManualOk = false;
   if (scanPallet && movTipo==='E' && ref.toUpperCase()===scanPallet.id.toUpperCase()) {
     const candL = (qty===scanPallet.qty) ? buscarEntradaManual(item.pn,qty) : null;
     if (candL && confirm(txtLigar(candL,scanPallet.id,qty))) {
@@ -2189,12 +2105,7 @@ async function doMovInner() {
     }
     const rc = await reclamarPallet();
     if (!rc.ok) { limpiarFormMov(); alert('⚠️ '+rc.msg); return; }
-    palletInfo = {id:scanPallet.id, maq:rc.maq||'', modelo:rc.modelo||''};
-    planMedio = await planComponentesMedio(item, qty, palletInfo.modelo);
-    if (planMedio.aplica && !confirm(textoPlanMedio(item, qty, palletInfo.id, planMedio))) {
-      await liberarPallet(palletInfo.id); scanPallet=null; limpiarFormMov();
-      toast('Recepción cancelada: el pallet sigue PENDIENTE','err'); return;
-    }
+    palletInfo = {id:scanPallet.id, maq:rc.maq||''};
     scanPallet=null; // ya reclamado: no volver a marcarlo después
   } else if ((movTipo==='E' || movTipo==='S') && esTerminadoLinea(item.desc) && await esPiezaDeLinea(item.pn)) {
     // Entrada: solo por QR del pallet. Salida: el único descuento de producción es el envío a ShipQR (desde el MES).
@@ -2230,13 +2141,10 @@ async function doMovInner() {
     alert('❌ NO se registró el movimiento.\n\n'+res.err+(palletInfo?'\n\nEl pallet '+palletInfo.id+' sigue PENDIENTE: vuelve a escanearlo.':'')+'\n\nAvísale al administrador si se repite.');
     return;
   }
-  let avisoComp = '';
-  if (planMedio && planMedio.aplica && planMedio.comps.length) avisoComp = await ejecutarComponentesMedio(planMedio, qty, palletInfo.id);
   if (movTipo==='E') await marcarPalletRecibido(ref);
   updateDash(); renderInv(); renderHist(); renderLocMap();
   const lbl = {E:'✅ Entrada',S:'📤 Salida',T:'🔀 Traslado'};
   toast(lbl[movTipo]+': '+qty.toLocaleString()+' pzas · '+item.pn,'ok');
-  if (avisoComp) alert(avisoComp);
   selIdx=null;
   document.getElementById('movForm').className='mf';
   document.getElementById('mfRef').value='';
