@@ -2169,12 +2169,12 @@ async function reclamarPallet(){
           const hist=(dd.recepciones||[]).concat([{planta:dd.recibidoEn, por:dd.recibidoPor||'', fecha:dd.recibidoFecha||''}]);
           _recepcionPrevia={id:scanPallet.id, recibidoEn:dd.recibidoEn, recibidoPor:dd.recibidoPor||'', recibidoFecha:dd.recibidoFecha||'', recepciones:dd.recepciones||[]};
           tx.update(ref,{status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora,recepciones:hist});
-          return {ok:true,maq:dd.maquina||'',modelo:dd.modelo||'',reRecepcion:true,desde:dd.recibidoEn};
+          return {ok:true,maq:dd.maquina||'',modelo:dd.modelo||'',planta:dd.planta||dd.recibidoEn||'',reRecepcion:true,desde:dd.recibidoEn};
         }
         if(st==='RECEIVED') return {ok:false,msg:'Pallet '+scanPallet.id+' YA fue escaneado'+(d.data().recibidoFecha?' el '+new Date(d.data().recibidoFecha).toLocaleString():'')+(d.data().recibidoPor?' por '+d.data().recibidoPor:'')+' — no se registra de nuevo'};
         if(st==='VOID') return {ok:false,msg:'Pallet '+scanPallet.id+' está ANULADO — no se puede recibir'};
         tx.update(ref,{status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora});
-        return {ok:true,maq:d.data().maquina||'',modelo:d.data().modelo||''};
+        return {ok:true,maq:d.data().maquina||'',modelo:d.data().modelo||'',planta:d.data().planta||''};
       } else {
         tx.set(ref,{status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora,creadoDesdeIMS:true});
       }
@@ -2204,7 +2204,7 @@ async function doMovInner() {
     }
     const rc = await reclamarPallet();
     if (!rc.ok) { limpiarFormMov(); alert('⚠️ '+rc.msg); return; }
-    palletInfo = {id:scanPallet.id, maq:rc.maq||'', modelo:rc.modelo||''};
+    palletInfo = {id:scanPallet.id, maq:rc.maq||'', modelo:rc.modelo||'', planta:rc.planta||''};
     // Si el pallet ya venía recibido de otra planta (P3), sus componentes ya se consumieron allá: no se descuenta nada en P4
     planMedio = rc.reRecepcion ? {aplica:false, comps:[], problemas:[], modelo:palletInfo.modelo} : await planComponentesMedio(item, qty, palletInfo.modelo);
     if (rc.reRecepcion) toast('📦 Pallet recibido antes en '+rc.desde+' → entrada a P4','info');
@@ -2232,7 +2232,7 @@ async function doMovInner() {
   if (!item.historial) item.historial=[];
   item.historial.push(hItem);
   const mov = {tipo:movTipo,pn:item.pn,desc:item.desc,familia:item.familia,qty,fecha:new Date().toISOString(),user:user.name,ref,stock:item.actual,loc:item.ubicacion};
-  if (palletInfo) { mov.origen='LINEA'; mov.pallet=palletInfo.id; mov.maq=palletInfo.maq; }
+  if (palletInfo) { mov.origen='LINEA'; mov.pallet=palletInfo.id; mov.maq=palletInfo.maq; mov.planta=palletInfo.planta||''; }
   else if (claveManualOk) { mov.origen='MANUAL'; mov.autorizado=true; }
   movs.unshift(mov);
   saveLocal();
@@ -2625,11 +2625,11 @@ async function ligarPallet(cand,id){
   const pd=await db.collection('pallets_medio').doc(id).get();
   const maq=(pd.exists&&pd.data().maquina)||'';
   const qs=await db.collection('planta4_movimientos').where('fecha','==',cand.fecha).where('pn','==',cand.pn).limit(1).get();
-  if(!qs.empty) await qs.docs[0].ref.update({ref:id,origen:'LINEA',pallet:id,maq:maq});
+  if(!qs.empty) await qs.docs[0].ref.update({ref:id,origen:'LINEA',pallet:id,maq:maq,planta:(pd.exists&&pd.data().planta)||''});
   const por=(user&&user.name)||'', ahora=new Date().toISOString();
-  if(pd.exists) await db.collection('pallets_medio').doc(id).update({status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora,vinculadoManual:true});
+  if(pd.exists) await db.collection('pallets_medio').doc(id).update(Object.assign({status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora,vinculadoManual:true}, (pd.data().status==='RECEIVED'&&pd.data().recibidoEn&&pd.data().recibidoEn!=='P4')?{recepciones:(pd.data().recepciones||[]).concat([{planta:pd.data().recibidoEn,por:pd.data().recibidoPor||'',fecha:pd.data().recibidoFecha||''}])}:{}));
   else await db.collection('pallets_medio').doc(id).set({status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora,vinculadoManual:true,creadoDesdeIMS:true});
-  cand.ref=id; cand.origen='LINEA'; cand.pallet=id; cand.maq=maq;
+  cand.ref=id; cand.origen='LINEA'; cand.pallet=id; cand.maq=maq; cand.planta=(pd.exists&&pd.data().planta)||'';
   try{ saveLocal(); renderHist(); }catch(e){}
 }
 function txtLigar(cand,id,q){ return 'Ya existe una entrada MANUAL de '+Number(q).toLocaleString()+' pzas de '+cand.pn+' ('+new Date(cand.fecha).toLocaleString()+') sin etiqueta.\n\n¿Ligar el pallet '+id+' a esa entrada SIN sumar de nuevo?\n\nAceptar = ligar sin sumar\nCancelar = dar entrada nueva (se suma al stock)'; }
@@ -2733,7 +2733,7 @@ function movHTML(m) {
   const usr = m.user || m.usuario || '';
   const ref = m.ref || m.referencia || '';
   let badge='';
-  if (m.origen==='LINEA') badge=' · <span style="color:var(--green)">📦 Etiqueta de línea'+(m.maq?' '+m.maq:'')+' · '+(m.pallet||'')+'</span>';
+  if (m.origen==='LINEA') badge=' · <span style="color:var(--green)">📦 Etiqueta de línea'+((m.planta&&m.planta!=='P4')?' '+m.planta:'')+(m.maq?' '+m.maq:'')+' · '+(m.pallet||'')+'</span>';
   else if (tipoNorm==='E' && /^GH69/i.test(m.pn||'') && !ref) badge=' · <span style="color:var(--red)">⚠️ sin etiqueta de línea</span>';
   const icons={E:'⬇️',S:'⬆️',T:'🔀',A:'⚖️',INI:'🏁'};
   const cols={E:'mb-E',S:'mb-S',T:'mb-T',A:'mb-A',INI:'mb-T'};
