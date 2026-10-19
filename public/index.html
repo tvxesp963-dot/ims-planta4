@@ -1143,6 +1143,11 @@ async function pushMov(mov, delta, hItem) {
 /* Si el stock no se pudo guardar, el pallet vuelve a PENDIENTE para poder escanearlo de nuevo */
 async function liberarPallet(id){
   try{
+    if(_recepcionPrevia && _recepcionPrevia.id===id){
+      const rp=_recepcionPrevia; _recepcionPrevia=null;
+      await db.collection('pallets_medio').doc(id).update({status:'RECEIVED', recibidoEn:rp.recibidoEn, recibidoPor:rp.recibidoPor, recibidoFecha:rp.recibidoFecha, recepciones:rp.recepciones});
+      return;
+    }
     const D = firebase.firestore.FieldValue.delete();
     await db.collection('pallets_medio').doc(id).update({status:'PENDING', recibidoEn:D, recibidoPor:D, recibidoFecha:D});
   }catch(e){ console.error('liberarPallet:', e); }
@@ -2146,8 +2151,10 @@ async function doMov(){
   finally { clearTimeout(wd); _movBusy=false; }
 }
 // Reclama el pallet de forma atómica: solo UNA persona/escaneo puede pasarlo de PENDING a RECEIVED
+let _recepcionPrevia = null; // si el pallet ya venía recibido de otra planta (ej. P3), guarda ese dato por si hay que deshacer
 async function reclamarPallet(){
   if(!scanPallet) return {ok:true};
+  _recepcionPrevia = null;
   const ref=db.collection('pallets_medio').doc(scanPallet.id);
   const por=(user&&user.name)||'', ahora=new Date().toISOString();
   try{
@@ -2156,6 +2163,14 @@ async function reclamarPallet(){
       const d=await tx.get(ref);
       if(d.exists){
         const st=d.data().status;
+        if(st==='RECEIVED' && d.data().recibidoEn && d.data().recibidoEn!=='P4'){
+          // Ya lo recibió otra planta (ej. P3) y ahora llega a P4: es una segunda entrada válida, se conserva el historial
+          const dd=d.data();
+          const hist=(dd.recepciones||[]).concat([{planta:dd.recibidoEn, por:dd.recibidoPor||'', fecha:dd.recibidoFecha||''}]);
+          _recepcionPrevia={id:scanPallet.id, recibidoEn:dd.recibidoEn, recibidoPor:dd.recibidoPor||'', recibidoFecha:dd.recibidoFecha||'', recepciones:dd.recepciones||[]};
+          tx.update(ref,{status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora,recepciones:hist});
+          return {ok:true,maq:dd.maquina||'',modelo:dd.modelo||'',reRecepcion:true,desde:dd.recibidoEn};
+        }
         if(st==='RECEIVED') return {ok:false,msg:'Pallet '+scanPallet.id+' YA fue escaneado'+(d.data().recibidoFecha?' el '+new Date(d.data().recibidoFecha).toLocaleString():'')+(d.data().recibidoPor?' por '+d.data().recibidoPor:'')+' — no se registra de nuevo'};
         if(st==='VOID') return {ok:false,msg:'Pallet '+scanPallet.id+' está ANULADO — no se puede recibir'};
         tx.update(ref,{status:'RECEIVED',recibidoEn:'P4',recibidoPor:por,recibidoFecha:ahora});
@@ -2190,7 +2205,9 @@ async function doMovInner() {
     const rc = await reclamarPallet();
     if (!rc.ok) { limpiarFormMov(); alert('⚠️ '+rc.msg); return; }
     palletInfo = {id:scanPallet.id, maq:rc.maq||'', modelo:rc.modelo||''};
-    planMedio = await planComponentesMedio(item, qty, palletInfo.modelo);
+    // Si el pallet ya venía recibido de otra planta (P3), sus componentes ya se consumieron allá: no se descuenta nada en P4
+    planMedio = rc.reRecepcion ? {aplica:false, comps:[], problemas:[], modelo:palletInfo.modelo} : await planComponentesMedio(item, qty, palletInfo.modelo);
+    if (rc.reRecepcion) toast('📦 Pallet recibido antes en '+rc.desde+' → entrada a P4','info');
     if (planMedio.aplica && !confirm(textoPlanMedio(item, qty, palletInfo.id, planMedio))) {
       await liberarPallet(palletInfo.id); scanPallet=null; limpiarFormMov();
       toast('Recepción cancelada: el pallet sigue PENDIENTE','err'); return;
@@ -2627,8 +2644,9 @@ async function aplicarPallet(parts){
     var d=await db.collection('pallets_medio').doc(id).get();
     if(d.exists){
       var p=d.data();
-      if(p.status==='RECEIVED'){ limpiarFormMov(); alert('⚠️ El pallet '+id+' YA fue escaneado'+(p.recibidoFecha?' el '+new Date(p.recibidoFecha).toLocaleString():'')+(p.recibidoPor?' por '+p.recibidoPor:'')+'.\n\nNo se registra de nuevo.'); return; }
+      if(p.status==='RECEIVED' && !(p.recibidoEn && p.recibidoEn!=='P4')){ limpiarFormMov(); alert('⚠️ El pallet '+id+' YA fue escaneado'+(p.recibidoFecha?' el '+new Date(p.recibidoFecha).toLocaleString():'')+(p.recibidoPor?' por '+p.recibidoPor:'')+'.\n\nNo se registra de nuevo.'); return; }
       else if(p.status==='VOID'){ limpiarFormMov(); alert('⚠️ El pallet '+id+' está ANULADO. No se puede recibir.'); return; }
+      else if(p.status==='RECEIVED') toast('📦 Pallet recibido antes en '+p.recibidoEn+': se registrará como entrada a P4','info');
       else if(p.destino&&p.destino!==PALLET_DEST) toast('⚠️ Este pallet es para '+p.destino,'err');
     }
     // ¿Ya se dio entrada manual a este pallet (misma parte y cantidad, sin etiqueta)? Ligarlo SIN sumar otra vez
