@@ -11,7 +11,7 @@
 /* ===== CONTROL DE VERSION (evita que celulares/laptops se queden con version vieja en cache) =====
    Cada vez que subas un index.html actualizado, cambia este numero (ej: 20260711).
    El sistema detecta el cambio y recarga automaticamente la version nueva. */
-var APP_VERSION = "20261016b";
+var APP_VERSION = "20261024";
 (function(){
   try{
     var key = 'ims_p4_version';
@@ -1161,6 +1161,15 @@ const COMP_MEDIO = {
   'GIFT BOX (TOP)': ['SHEET TOP BOX','CHIP BOARD TOP (RANURADO)'],
   'LOWER BOX (BOTTOM)': ['SHEET LOWER BOX (BOTTOM)','CHIP BOARD BOTTOM (RANURADO)']
 };
+/* Componentes extra del BOTTOM: se descuentan SOLO si existen en el BOM del modelo ("donde aplique"). */
+const COMP_MEDIO_OPC = {
+  'LOWER BOX (BOTTOM)': [
+    {nombre:'SET PAD / PHONE PAD', match:function(b){ var d=String(b.desc||'').trim().toUpperCase(); return d.indexOf('SET PAD')>=0 || d.indexOf('PHONE PAD')>=0; }},
+    {nombre:'PULP TRAY',           match:function(b){ return String(b.desc||'').trim().toUpperCase().indexOf('PULP TRAY')>=0; }},
+    {nombre:'BACK STICKER',        match:function(b){ return String(b.desc||'').trim().toUpperCase().indexOf('BACK STICKER')>=0; }},
+    {nombre:'GALLETA',             match:function(b){ return String(b.pn||'').trim().toUpperCase()==='GH69-46113G' || String(b.desc||'').trim().toUpperCase()==='GALLETA'; }}
+  ]
+};
 var _bomMedioCache = null;
 async function bomActivoMedio(){
   if (_bomMedioCache && (Date.now() - _bomMedioCache.t) < 600000) return _bomMedioCache.bom;
@@ -1172,6 +1181,9 @@ async function bomActivoMedio(){
 /* Calcula el plan SIN tocar nada. */
 async function planComponentesMedio(item, qty, modelo){
   const nU = x => String(x || '').trim().toUpperCase();
+  /* Clave de modelo tolerante: "SM-S928B/DS", "S928" y "SM-S928" cuentan como el mismo modelo */
+  const kM = x => { const m = String(x || '').toUpperCase().match(/S\d{3,4}|[AFMZ]\d{3,4}/); return m ? m[0] : nU(x); };
+  const mismoModelo = b => b.sm && (nU(b.sm) === nU(modelo) || kM(b.sm) === kM(modelo));
   const dsc0 = nU(item.desc);
   const plan = {aplica: false, comps: [], problemas: [], modelo: modelo || ''};
   const todos = [].concat(COMP_MEDIO['GIFT BOX (TOP)'], COMP_MEDIO['LOWER BOX (BOTTOM)']);
@@ -1188,15 +1200,32 @@ async function planComponentesMedio(item, qty, modelo){
   try { bom = await bomActivoMedio(); }
   catch(e) { plan.problemas.push('No se pudo leer el BOM (' + e.message + '): NO se descontarán Sheet ni Chip Board.'); return plan; }
   for (const dsc of lista) {
-    const fila = bom.find(b => b.pn && b.sm && nU(b.sm) === nU(modelo) && nU(b.desc) === dsc);
+    let fila = bom.find(b => b.pn && mismoModelo(b) && nU(b.desc) === dsc);
     if (!fila) { plan.problemas.push(dsc + ': no está en el BOM del modelo ' + modelo + ' (NO se descontará).'); continue; }
-    const it = items.find(i => nU(i.pn) === nU(fila.pn) && nU(i.desc) === dsc);
+    const it = items.find(i => nU(i.pn) === nU(fila.pn) && nU(i.desc) === nU(fila.desc));
     if (!it) { plan.problemas.push(fila.pn + ' ' + dsc + ': no existe en el IMS (NO se descontará).'); continue; }
     const a0 = parseFloat(it.actual) || 0;
     const aplicado = Math.min(qty, Math.max(0, a0));
     plan.comps.push({it: it, fila: fila, dsc: dsc, antes: a0, aplicado: aplicado, faltante: qty - aplicado});
     if (qty - aplicado > 0) plan.problemas.push(fila.pn + ' ' + dsc + ': solo hay ' + a0.toLocaleString() + ' y se necesitan ' + qty.toLocaleString() + ' (quedará en 0, faltan ' + (qty - aplicado).toLocaleString() + ').');
   }
+  /* Extras del Bottom (Set Pad / Pulp Tray / Back Sticker / Galleta): solo los que existan en el BOM del modelo */
+  const opc = COMP_MEDIO_OPC[dsc0] || [];
+  for (const o of opc) {
+    const filas = bom.filter(b => b.pn && mismoModelo(b) && o.match(b));
+    const uniq = []; filas.forEach(f => { if (!uniq.some(u => nU(u.pn) === nU(f.pn) && nU(u.desc) === nU(f.desc))) uniq.push(f); });
+    if (!uniq.length) continue;   /* no aplica a este modelo (p.ej. S947 lleva Pulp Tray y no Set Pad) */
+    if (uniq.length > 1) { plan.problemas.push(o.nombre + ': el BOM del modelo ' + modelo + ' trae ' + uniq.length + ' renglones (' + uniq.map(u => u.pn).join(', ') + '): NO se descontará, hazlo con un AJUSTE.'); continue; }
+    const fila = uniq[0];
+    const cand = items.filter(i => nU(i.pn) === nU(fila.pn) && nU(i.desc) === nU(fila.desc));
+    if (cand.length !== 1) { plan.problemas.push(fila.pn + ' ' + o.nombre + ': ' + (cand.length ? 'está duplicado' : 'no existe') + ' en el IMS, NO se descontará.'); continue; }
+    const it = cand[0];
+    const a0 = parseFloat(it.actual) || 0;
+    const aplicado = Math.min(qty, Math.max(0, a0));
+    plan.comps.push({it: it, fila: fila, dsc: it.desc || o.nombre, antes: a0, aplicado: aplicado, faltante: qty - aplicado});
+    if (qty - aplicado > 0) plan.problemas.push(fila.pn + ' ' + o.nombre + ': solo hay ' + a0.toLocaleString() + ' y se necesitan ' + qty.toLocaleString() + ' (quedará en 0, faltan ' + (qty - aplicado).toLocaleString() + ').');
+  }
+  if (dsc0 === 'LOWER BOX (BOTTOM)' && !bom.some(b => b.pn && mismoModelo(b) && /SET PAD|PHONE PAD|PULP TRAY/.test(nU(b.desc)))) plan.problemas.push('El BOM del modelo ' + modelo + ' no trae Set Pad / Phone Pad ni Pulp Tray (NO se descontarán). Revisa el BOM cargado.');
   return plan;
 }
 function textoPlanMedio(item, qty, palletId, plan){
