@@ -1183,7 +1183,10 @@ async function planComponentesMedio(item, qty, modelo){
   const nU = x => String(x || '').trim().toUpperCase();
   /* Clave de modelo tolerante: "SM-S928B/DS", "S928" y "SM-S928" cuentan como el mismo modelo */
   const kM = x => { const m = String(x || '').toUpperCase().match(/S\d{3,4}|[AFMZ]\d{3,4}/); return m ? m[0] : nU(x); };
-  const mismoModelo = b => b.sm && (nU(b.sm) === nU(modelo) || kM(b.sm) === kM(modelo));
+  let _hayExacto = null;
+  /* Modelo EXACTO primero (S947 CRN, SM-S947...-N y -O son BOMs distintos). Solo si no hay ninguno exacto, se usa la clave corta. */
+  const mismoModelo = b => { if (!b.sm) return false; if (_hayExacto === null) _hayExacto = bom.some(x => x.sm && nU(x.sm) === nU(modelo)); if (_hayExacto) return nU(b.sm) === nU(modelo); if (_cands === null) _cands = [...new Set(bom.filter(x => x.sm && kM(x.sm) === kM(modelo)).map(x => nU(x.sm)))]; return _cands.length === 1 && nU(b.sm) === _cands[0]; };
+  let _cands = null;   /* clave corta: solo vale si apunta a UNA sola sección del BOM; si hay varias es ambiguo y NO se descuenta nada */
   const dsc0 = nU(item.desc);
   const plan = {aplica: false, comps: [], problemas: [], modelo: modelo || ''};
   const todos = [].concat(COMP_MEDIO['GIFT BOX (TOP)'], COMP_MEDIO['LOWER BOX (BOTTOM)']);
@@ -1199,6 +1202,8 @@ async function planComponentesMedio(item, qty, modelo){
   let bom;
   try { bom = await bomActivoMedio(); }
   catch(e) { plan.problemas.push('No se pudo leer el BOM (' + e.message + '): NO se descontarán Sheet ni Chip Board.'); return plan; }
+  mismoModelo({sm: '_'});   /* prepara _hayExacto/_cands */
+  if (!_hayExacto && _cands && _cands.length > 1) { plan.problemas.push('El modelo "' + modelo + '" es AMBIGUO: coincide con ' + _cands.length + ' secciones del BOM (' + _cands.join(', ') + '). NO se descontará nada; el pallet debe traer el modelo completo.'); return plan; }
   for (const dsc of lista) {
     let fila = bom.find(b => b.pn && mismoModelo(b) && nU(b.desc) === dsc);
     if (!fila) { plan.problemas.push(dsc + ': no está en el BOM del modelo ' + modelo + ' (NO se descontará).'); continue; }
