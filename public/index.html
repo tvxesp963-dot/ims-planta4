@@ -11,7 +11,7 @@
 /* ===== CONTROL DE VERSION (evita que celulares/laptops se queden con version vieja en cache) =====
    Cada vez que subas un index.html actualizado, cambia este numero (ej: 20260711).
    El sistema detecta el cambio y recarga automaticamente la version nueva. */
-var APP_VERSION = "20261024";
+var APP_VERSION = "20261115a";
 (function(){
   try{
     var key = 'ims_p4_version';
@@ -2897,7 +2897,7 @@ function buildAdmin() {
 }
 function exportCSV() {
   const rows=[['PN','Descripción','Familia','Inv.Inicial','Entradas','Salidas','Stock','Precio','Valor','Estatus','Ubicación']];
-  items.forEach(i=>rows.push([i.pn,i.desc,i.familia,i.inicial,i.entradas,i.salidas,i.actual,i.precio,((parseFloat(i.actual)||0)*(parseFloat(i.precio)||0)).toFixed(2),i.estatus,i.ubicacion||'Almacén']));
+  items.forEach(i=>rows.push([i.pn,i.desc,i.familia,i.inicial,i.entradas,i.salidas,Math.max(0,Number(i.actual)||0),i.precio,(Math.max(0,Number(i.actual)||0)*(parseFloat(i.precio)||0)).toFixed(2),i.estatus,i.ubicacion||'Almacén']));
   const csv=rows.map(r=>r.join(',')).join('\n');
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='IMS_'+new Date().toISOString().split('T')[0]+'.csv';a.click();
   toast('✅ CSV descargado','ok');
@@ -2927,12 +2927,12 @@ function exportExcel() {
       Number(i.inicial)||0,
       Number(i.entradas)||0,
       Number(i.salidas)||0,
-      Number(i.actual)||0,
+      Math.max(0,Number(i.actual)||0),
       i.loc1!==undefined?i.loc1:'',
       i.loc2!==undefined?i.loc2:'',
       i.loc3!==undefined?i.loc3:'',
       Number(i.precio)||0,
-      +(((Number(i.actual)||0)*(Number(i.precio)||0)).toFixed(2)),
+      +((Math.max(0,Number(i.actual)||0)*(Number(i.precio)||0)).toFixed(2)),
       i.estatus||'',
       i.ubicacion||'Almacén'
     ]);
@@ -2943,6 +2943,14 @@ function exportExcel() {
   // Ancho de columnas
   ws['!cols'] = [{wch:14},{wch:32},{wch:10},{wch:11},{wch:10},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:11},{wch:12},{wch:11},{wch:14}];
   XLSX.utils.book_append_sheet(wb, ws, 'Inventario');
+  const negs = filtrados.filter(function(i){ return (Number(i.actual)||0) < 0; });
+  if (negs.length) {
+    const rn = [['Familia','Part Number','Descripción','Inventario real (negativo)']];
+    negs.forEach(function(i){ rn.push([i.familia||'', i.pn||'', i.desc||'', Number(i.actual)||0]); });
+    const wsn = XLSX.utils.aoa_to_sheet(rn);
+    wsn['!cols'] = [{wch:10},{wch:14},{wch:32},{wch:24}];
+    XLSX.utils.book_append_sheet(wb, wsn, 'Revisar (negativos)');
+  }
 
   const filtroNombre = invFam==='TODOS'?'Todos':invFam;
   const fecha = new Date().toISOString().split('T')[0];
@@ -4014,12 +4022,13 @@ async function generarReporteFecha(){
       const it = doc.data();
       const pn = (it.pn||'').trim();
       if (pn){ if(!conteoPN[pn]) conteoPN[pn]=[]; conteoPN[pn].push(doc.id); }
-      const stock = _repStockAlaFecha(it.historial, cutoffMs);
-      if (stock===null) return;
+      const stockReal = _repStockAlaFecha(it.historial, cutoffMs);
+      if (stockReal===null) return;
+      const stock = Math.max(0, stockReal); // reportes: nunca negativos
       const precio = Number(it.precio)||0;
       const valor = stock*precio;
       totalValor += valor;
-      filas.push({familia:it.familia||'SIN FAMILIA', pn:it.pn||'', desc:it.desc||'', stock, precio, valor:Math.round(valor*100)/100});
+      filas.push({familia:it.familia||'SIN FAMILIA', pn:it.pn||'', desc:it.desc||'', stock, stockReal, precio, valor:Math.round(valor*100)/100});
     });
     if (filas.length===0){ st.style.background='#fee2e2'; st.style.color='#991b1b'; st.textContent='No hay partes con historial hasta esa fecha.'; btn.disabled=false; return; }
     filas.sort((a,b)=>(a.familia+a.pn).localeCompare(b.familia+b.pn));
@@ -4028,7 +4037,7 @@ async function generarReporteFecha(){
     filas.forEach(f=>{ if(!porFam[f.familia]) porFam[f.familia]={l:0,u:0,v:0}; porFam[f.familia].l++; porFam[f.familia].u+=f.stock; porFam[f.familia].v+=f.valor; });
     const familias = Object.keys(porFam).sort();
 
-    const negativos = filas.filter(f=>f.stock<0);
+    const negativos = filas.filter(f=>f.stockReal<0);
     const dup = [];
     Object.keys(conteoPN).forEach(pn=>{ if(conteoPN[pn].length>1) conteoPN[pn].forEach(id=>dup.push({pn, id})); });
 
@@ -4093,7 +4102,7 @@ async function generarReporteFecha(){
       wsN.columns=[{width:20},{width:16},{width:34},{width:14}];
       headerRow(wsN, ['Familia','Part Number','Descripción','Inventario al '+fechaInput]);
       negativos.forEach(f=>{
-        const r = wsN.addRow([f.familia,f.pn,f.desc,f.stock]);
+        const r = wsN.addRow([f.familia,f.pn,f.desc,f.stockReal]);
         r.eachCell(c=>{c.border=borde; c.fill={type:'pattern',pattern:'solid',fgColor:{argb:ROJO_CLARO}};});
         r.getCell(4).font={color:{argb:ROJO_TXT},bold:true};
       });
