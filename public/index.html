@@ -11,7 +11,7 @@
 /* ===== CONTROL DE VERSION (evita que celulares/laptops se queden con version vieja en cache) =====
    Cada vez que subas un index.html actualizado, cambia este numero (ej: 20260711).
    El sistema detecta el cambio y recarga automaticamente la version nueva. */
-var APP_VERSION = "20261116a";
+var APP_VERSION = "20261116b";
 (function(){
   try{
     var key = 'ims_p4_version';
@@ -1910,8 +1910,8 @@ function launch() {
   rb.className = 'ur '+(user.role==='admin'?'ra':user.role==='operador'?'ro':'rv');
   document.getElementById('navAdmin').style.display = user.role==='admin'?'flex':'none';
   if(user.role==='admin') setTimeout(loadImsUsers, 500);
-  if(user.role==='admin') setTimeout(consLoad, 900);
-  if(user.role!=='viewer') consStart();
+  if(user.role==='admin') setTimeout(function(){ if(typeof consLoad==='function') consLoad(); }, 900);
+  if(user.role!=='viewer') setTimeout(function(){ if(typeof consStart==='function') consStart(); }, 1500);
   // VIEWER: ocultar todo excepto Inventario
   const isViewer = (user.role==='viewer');
   ['pgMov','pgTraz','pgQR','pgHist','pgPlan'].forEach(id=>{
@@ -1948,7 +1948,7 @@ function goPage(id, btn) {
   document.querySelectorAll('.bni').forEach(b=>b.classList.remove('on'));
   document.getElementById(id).classList.add('active');
   if (btn) btn.classList.add('on');
-  if (id==='pgAdmin') { buildAdmin(); if(user&&user.role==='admin') { loadImsUsers(); consLoad(); } }
+  if (id==='pgAdmin') { buildAdmin(); if(user&&user.role==='admin') { loadImsUsers(); if(typeof consLoad==='function') consLoad(); } }
   if (id==='pgPlan') { loadPlan(); }
   // Mostrar botón regreso si no estamos en Dash
   const backBtn = document.getElementById('backBtn');
