@@ -11,7 +11,7 @@
 /* ===== CONTROL DE VERSION (evita que celulares/laptops se queden con version vieja en cache) =====
    Cada vez que subas un index.html actualizado, cambia este numero (ej: 20260711).
    El sistema detecta el cambio y recarga automaticamente la version nueva. */
-var APP_VERSION = "20261116b";
+var APP_VERSION = "20261116c";
 (function(){
   try{
     var key = 'ims_p4_version';
@@ -545,6 +545,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         <button class="btn-conf bc-E" onclick="consAddExtra()" style="width:auto;padding:0 14px">+ Agregar / Add</button>
       </div>
       <button class="btn-conf bc-E" onclick="consSendNow()" style="background:#3d2b1a;border:1px solid #e67e22;color:#e67e22">📤 Enviar reporte ahora / Send now</button>
+    </div>
+    <div class="sh">📧 Pulp Tray · Reporte diario / Daily / 일일</div>
+    <div class="card" style="padding:.9rem">
+      <h3 style="font-size:.8rem;margin-bottom:6px">📦 Pulp Tray P4</h3>
+      <div style="font-size:10px;color:var(--text2);margin-bottom:10px;line-height:1.5">Se envía de lunes a viernes desde las 16:35 (con el IMS abierto). · Mon–Fri from 16:35 (IMS open). · 월–금 16:35부터 발송.</div>
+      <div id="ptList" style="margin-bottom:8px"></div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:6px;margin-bottom:8px">
+        <input class="ref-in" id="ptExtra" type="email" placeholder="+ otro correo / other email" style="margin:0">
+        <button class="btn-conf bc-E" onclick="ptAddExtra()" style="width:auto;padding:0 14px">+ Agregar / Add</button>
+      </div>
+      <button class="btn-conf bc-E" onclick="ptSendNow()" style="background:#3d2b1a;border:1px solid #e67e22;color:#e67e22">📤 Enviar ahora / Send now</button>
     </div>
     <div class="sh">Firebase</div>
     <div class="card">
@@ -1910,8 +1921,8 @@ function launch() {
   rb.className = 'ur '+(user.role==='admin'?'ra':user.role==='operador'?'ro':'rv');
   document.getElementById('navAdmin').style.display = user.role==='admin'?'flex':'none';
   if(user.role==='admin') setTimeout(loadImsUsers, 500);
-  if(user.role==='admin') setTimeout(function(){ if(typeof consLoad==='function') consLoad(); }, 900);
-  if(user.role!=='viewer') setTimeout(function(){ if(typeof consStart==='function') consStart(); }, 1500);
+  if(user.role==='admin') setTimeout(function(){ if(typeof consLoad==='function') consLoad(); if(typeof ptLoad==='function') ptLoad(); }, 900);
+  if(user.role!=='viewer') setTimeout(function(){ if(typeof consStart==='function') consStart(); if(typeof ptStart==='function') ptStart(); }, 1500);
   // VIEWER: ocultar todo excepto Inventario
   const isViewer = (user.role==='viewer');
   ['pgMov','pgTraz','pgQR','pgHist','pgPlan'].forEach(id=>{
@@ -1948,7 +1959,7 @@ function goPage(id, btn) {
   document.querySelectorAll('.bni').forEach(b=>b.classList.remove('on'));
   document.getElementById(id).classList.add('active');
   if (btn) btn.classList.add('on');
-  if (id==='pgAdmin') { buildAdmin(); if(user&&user.role==='admin') { loadImsUsers(); if(typeof consLoad==='function') consLoad(); } }
+  if (id==='pgAdmin') { buildAdmin(); if(user&&user.role==='admin') { loadImsUsers(); if(typeof consLoad==='function') consLoad(); if(typeof ptLoad==='function') ptLoad(); } }
   if (id==='pgPlan') { loadPlan(); }
   // Mostrar botón regreso si no estamos en Dash
   const backBtn = document.getElementById('backBtn');
@@ -4515,6 +4526,124 @@ function consStart(){
   CONS_TIMER=setInterval(consAuto,60000);
 }
 window.consStart=consStart;
+
+
+// ══ REPORTE DIARIO PULP TRAY (P4) · ES/EN/KO · lun–vie 16:35 con el IMS abierto ══
+var PT_DOC='reporte_pulptray_p4';
+var PT_URL='https://script.google.com/macros/s/AKfycbxGagIlCTeJAb5rfZvBSYoZOJqEFuXqvfNqWf_Po9L0fM7lteDY0GvyFFF97VuWbpE/exec', PT_CLAVE='tavox2026';
+var PT_HORA={h:16,m:35};
+var PT_DEST=[], PT_USERS=[], PT_BUSY=false, PT_INTENTOS=0, PT_TIMER=null;
+function ptN(v){ return parseFloat(v)||0; }
+function ptEsc(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function ptTxt(k){
+  var T={es:{err:'Error: ',sin:'Marca al menos un correo primero',env:'⏳ Enviando reporte Pulp Tray...',ok:'✅ Reporte enviado a {n} correo(s)'},
+         en:{err:'Error: ',sin:'Check at least one email first',env:'⏳ Sending Pulp Tray report...',ok:'✅ Report sent to {n} email(s)'},
+         ko:{err:'오류: ',sin:'먼저 이메일을 하나 이상 선택하세요',env:'⏳ Pulp Tray 보고서 전송 중...',ok:'✅ 보고서가 {n}개 이메일로 전송되었습니다'}};
+  var l=(typeof IMS_LANG!=='undefined'&&T[IMS_LANG])?IMS_LANG:'es'; return T[l][k];
+}
+async function ptLoad(){
+  if(!db) return;
+  try{ var d=await db.collection('ims_config').doc(PT_DOC).get();
+    PT_DEST=(d.exists&&Array.isArray(d.data().destinatarios))?d.data().destinatarios.map(function(e){return String(e).toLowerCase();}):[]; }catch(e){ console.error('ptLoad',e); }
+  try{ var su=await db.collection('ims_usuarios').get(); PT_USERS=[];
+    su.forEach(function(x){ var u=x.data(); if(u.email && u.activo!==false) PT_USERS.push({email:String(u.email).toLowerCase(),nombre:u.nombre||''}); }); }catch(e){ console.error('ptLoad users',e); }
+  ptRender();
+}
+window.ptLoad=ptLoad;
+function ptRender(){
+  var el=document.getElementById('ptList'); if(!el) return;
+  var mapa={}; PT_USERS.forEach(function(u){mapa[u.email]=u;}); PT_DEST.forEach(function(e){ if(!mapa[e]) mapa[e]={email:e,nombre:''}; });
+  var lista=Object.keys(mapa).sort().map(function(k){return mapa[k];});
+  if(!lista.length){ el.innerHTML='<div style="font-size:10px;color:var(--text2)">—</div>'; return; }
+  el.innerHTML=lista.map(function(u){ var on=PT_DEST.indexOf(u.email)>=0;
+    return '<label style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg3);border:1px solid '+(on?'#e67e22':'var(--border2)')+';border-radius:7px;margin-bottom:5px;cursor:pointer"><input type="checkbox" '+(on?'checked':'')+' onchange="ptToggle(\''+u.email+'\',this)" style="width:18px;height:18px;accent-color:#e67e22;cursor:pointer"><span style="font-size:.72rem">'+(u.nombre?'<strong>'+ptEsc(u.nombre)+'</strong> · ':'')+'<span style="color:var(--text2)">'+ptEsc(u.email)+'</span></span></label>'; }).join('');
+}
+async function ptGuardar(arr){ await db.collection('ims_config').doc(PT_DOC).set({destinatarios:arr,actualizadoPor:(user&&user.email)||'',actualizadoEn:new Date().toISOString()},{merge:true}); }
+window.ptToggle=async function(email,chk){
+  chk.disabled=true; var nuevo=PT_DEST.filter(function(e){return e!==email;}); if(chk.checked) nuevo.push(email);
+  try{ await ptGuardar(nuevo); PT_DEST=nuevo; ptRender(); }catch(err){ toast(ptTxt('err')+err.message,'err'); chk.checked=!chk.checked; chk.disabled=false; }
+};
+window.ptAddExtra=async function(){
+  var inp=document.getElementById('ptExtra'); var email=(inp.value||'').trim().toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast('Email ?','err'); return; }
+  if(PT_DEST.indexOf(email)>=0){ inp.value=''; return; }
+  var nuevo=PT_DEST.concat([email]);
+  try{ await ptGuardar(nuevo); PT_DEST=nuevo; inp.value=''; ptRender(); }catch(err){ toast(ptTxt('err')+err.message,'err'); }
+};
+
+// Datos: solo Pulp Tray, por número de parte (suma duplicados), entradas/salidas de HOY
+async function ptData(){
+  var snap=await db.collection('planta4_inventario').get(); var m={};
+  var hoy=new Date(), y=hoy.getFullYear(), mo=hoy.getMonth(), d=hoy.getDate();
+  snap.forEach(function(doc){
+    var i=doc.data(); if(String(i.desc||'').toUpperCase().indexOf('PULP TRAY')<0) return;
+    var k=String(i.pn||'').trim().toUpperCase(); if(!k) return;
+    var r=m[k]||(m[k]={pn:i.pn,stock:0,ent:0,sal:0,val:0});
+    var a=Math.max(0,ptN(i.actual)); r.stock+=a; r.val+=a*ptN(i.precio);
+    (i.historial||[]).forEach(function(h){
+      if(!h||!h.fecha) return; var f=new Date(h.fecha);
+      if(f.getFullYear()!==y||f.getMonth()!==mo||f.getDate()!==d) return;
+      if(h.tipo==='E') r.ent+=ptN(h.qty); else if(h.tipo==='S') r.sal+=ptN(h.qty);
+    });
+  });
+  var rows=Object.keys(m).sort().map(function(k){return m[k];});
+  var G={rows:rows,tot:0,val:0,ceros:0,ent:0,sal:0};
+  rows.forEach(function(r){ G.tot+=r.stock; G.val+=r.val; G.ent+=r.ent; G.sal+=r.sal; if(r.stock<=0) G.ceros++; });
+  G.fecha=hoy.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'});
+  return G;
+}
+function ptNum(n){ return Math.round(n).toLocaleString('en-US'); }
+function ptHtml(G){
+  var NAVY='#1F3864',LINE='#D9DEE7',SOFT='#F4F6FA',RED='#B42318';
+  function td(t,r,b){ return '<td style="padding:7px 10px;font-size:13px;border-bottom:1px solid '+LINE+';text-align:'+(r?'right':'left')+(b?';font-weight:700;background:'+SOFT:'')+'">'+t+'</td>'; }
+  function th(a,b,c,r){ return '<th style="background:'+NAVY+';color:#fff;padding:8px 10px;font-size:11px;line-height:1.35;text-align:'+(r===0?'left':'right')+'">'+a+'<br><span style="font-weight:400;opacity:.85">'+b+'<br>'+c+'</span></th>'; }
+  function kpi(a,b,c,v,col){ return '<td style="padding:12px;text-align:center;background:'+SOFT+';border:1px solid '+LINE+'"><div style="font-size:10px;color:#667085;line-height:1.4">'+a.toUpperCase()+'<br>'+b.toUpperCase()+'<br>'+c+'</div><div style="font-size:22px;font-weight:700;color:'+(col||NAVY)+';margin-top:4px">'+v+'</div></td>'; }
+  var h='<div style="background:#EEF1F6;padding:20px 0;font-family:Arial,\'Malgun Gothic\',sans-serif"><table align="center" width="700" cellpadding="0" cellspacing="0" style="background:#fff;border:1px solid '+LINE+'"><tr><td style="background:'+NAVY+';color:#fff;padding:20px 26px"><div style="font-size:11px;letter-spacing:1px;opacity:.8">EUNSUNG MEXICANA · PLANTA 4 / PLANT 4 / 4공장</div><div style="font-size:21px;font-weight:700;margin-top:6px">Pulp Tray — Reporte diario</div><div style="font-size:15px;opacity:.9">Daily Report · 일일 보고서</div><div style="font-size:12px;opacity:.85;margin-top:6px">'+ptEsc(G.fecha)+'</div></td></tr><tr><td style="padding:22px 26px">';
+  h+='<table width="100%" cellspacing="6" style="border-collapse:separate"><tr>'+kpi('Existencia total','Total on hand','총 재고',ptNum(G.tot))+kpi('Valor (USD)','Value (USD)','금액 (USD)','$'+ptNum(G.val))+kpi('Sin stock','Out of stock','재고 없음',G.ceros,G.ceros?RED:'#067647')+'</tr></table>';
+  h+='<table width="100%" cellspacing="0" style="border-collapse:collapse;margin-top:14px"><tr>'+th('Part No.','Part No.','품번',0)+th('Entradas hoy','In today','오늘 입고')+th('Salidas hoy','Out today','오늘 출고')+th('Existencia','On hand','재고')+th('Valor','Value','금액')+th('Estado','Status','상태')+'</tr>';
+  G.rows.forEach(function(r){ h+='<tr>'+td(ptEsc(r.pn))+td(r.ent?ptNum(r.ent):'—',1)+td(r.sal?ptNum(r.sal):'—',1)+td(ptNum(r.stock),1)+td('$'+ptNum(r.val),1)+td(r.stock<=0?'<span style="color:'+RED+';font-weight:700">SIN STOCK<br>OUT OF STOCK<br>재고 없음</span>':'OK',1)+'</tr>'; });
+  h+='<tr>'+td('Total',0,1)+td(G.ent?ptNum(G.ent):'—',1,1)+td(G.sal?ptNum(G.sal):'—',1,1)+td(ptNum(G.tot),1,1)+td('$'+ptNum(G.val),1,1)+td('',1,1)+'</tr></table>';
+  h+='<p style="font-size:11px;color:#667085;margin-top:14px">Generado automáticamente por el IMS · Generated automatically by the IMS · IMS에서 자동 생성됨</p></td></tr></table></div>';
+  return h;
+}
+async function ptSend(dest){
+  var G=await ptData();
+  var subj='Pulp Tray P4 — Reporte diario / Daily Report / 일일 보고서 — '+G.fecha;
+  var txt=subj+'\nTotal: '+ptNum(G.tot)+' pzas · $'+ptNum(G.val)+' · Sin stock/Out of stock: '+G.ceros+'\n'+G.rows.map(function(r){return r.pn+': '+ptNum(r.stock);}).join('\n');
+  var html=ptHtml(G), ok=0;
+  for(var k=0;k<dest.length;k++){
+    try{ await fetch(PT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({clave:PT_CLAVE,to:dest[k],subject:subj,message:txt,html:html,attachName:'',attachB64:''})}); ok++; await new Promise(function(res){setTimeout(res,1000);}); }
+    catch(e){ console.error('ptSend',e); }
+  }
+  return ok;
+}
+window.ptSendNow=async function(){
+  if(!PT_DEST.length){ toast(ptTxt('sin'),'err'); return; }
+  toast(ptTxt('env'),'ok');
+  try{ var ok=await ptSend(PT_DEST); toast(ptTxt('ok').replace('{n}',ok), ok>0?'ok':'err'); }catch(e){ toast(ptTxt('err')+e.message,'err'); }
+};
+async function ptAuto(){
+  if(PT_BUSY||PT_INTENTOS>=3) return;
+  if(!db||!user||user.role==='viewer') return;
+  var a=new Date(); if(a.getDay()<1||a.getDay()>5) return;
+  if(a.getHours()*60+a.getMinutes() < PT_HORA.h*60+PT_HORA.m) return;
+  var dia=a.getFullYear()+'-'+String(a.getMonth()+1).padStart(2,'0')+'-'+String(a.getDate()).padStart(2,'0');
+  if(localStorage.getItem('pt-'+PT_DOC)===dia) return;
+  PT_BUSY=true;
+  try{
+    var ref=db.collection('ims_config').doc(PT_DOC); var s=await ref.get(); var d=s.exists?s.data():{};
+    if(d.ultimoEnvioDia===dia){ localStorage.setItem('pt-'+PT_DOC,dia); return; }
+    var dest=Array.isArray(d.destinatarios)?d.destinatarios:[]; if(!dest.length) return;
+    var prev=d.ultimoEnvioDia||'';
+    var res=await db.runTransaction(async function(tx){ var s2=await tx.get(ref); var x=s2.exists?s2.data():{}; if(x.ultimoEnvioDia===dia) return false; tx.set(ref,{ultimoEnvioDia:dia},{merge:true}); return true; });
+    if(!res){ localStorage.setItem('pt-'+PT_DOC,dia); return; }
+    var ok=await ptSend(dest);
+    if(ok>0){ localStorage.setItem('pt-'+PT_DOC,dia); await ref.set({ultimoEnvioEn:new Date().toISOString(),ultimoEnvioCorreos:ok},{merge:true}); }
+    else { PT_INTENTOS++; await ref.set({ultimoEnvioDia:prev},{merge:true}); }
+  }catch(e){ console.error('ptAuto',e); } finally{ PT_BUSY=false; }
+}
+function ptStart(){ if(PT_TIMER) return; setTimeout(ptAuto,12000); PT_TIMER=setInterval(ptAuto,60000); }
+window.ptStart=ptStart;
 
 </script>
 </body>
