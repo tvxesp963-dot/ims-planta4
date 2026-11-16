@@ -11,7 +11,7 @@
 /* ===== CONTROL DE VERSION (evita que celulares/laptops se queden con version vieja en cache) =====
    Cada vez que subas un index.html actualizado, cambia este numero (ej: 20260711).
    El sistema detecta el cambio y recarga automaticamente la version nueva. */
-var APP_VERSION = "20261116d";
+var APP_VERSION = "20261116e";
 (function(){
   try{
     var key = 'ims_p4_version';
@@ -4588,15 +4588,29 @@ window.ptAddTel=async function(){
   try{ await ptGuardarTel(PT_TEL.concat([t])); inp.value=''; }catch(e){ toast(ptTxt('err')+e.message,'err'); }
 };
 window.ptDelTel=async function(i){ try{ await ptGuardarTel(PT_TEL.filter(function(_,k){return k!==i;})); }catch(e){ toast(ptTxt('err')+e.message,'err'); } };
-// WhatsApp: abre el chat con el resumen ya escrito (ES/EN/KO); solo falta tocar "Enviar"
+// WhatsApp: manda el MISMO reporte del correo como imagen (el texto de WhatsApp no admite formato)
+function ptCargarH2C(){ return new Promise(function(res,rej){ if(window.html2canvas) return res(); var s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'; s.onload=res; s.onerror=function(){rej(new Error('html2canvas'));}; document.head.appendChild(s); }); }
+async function ptImagen(){
+  var G=await ptData(); await ptCargarH2C();
+  var box=document.createElement('div'); box.style.cssText='position:fixed;left:-10000px;top:0;width:720px;background:#EEF1F6';
+  box.innerHTML=ptHtml(G); document.body.appendChild(box);
+  try{ var cv=await html2canvas(box,{backgroundColor:'#EEF1F6',scale:2}); var blob=await new Promise(function(r){cv.toBlob(r,'image/png');}); return {blob:blob,G:G}; }
+  finally{ document.body.removeChild(box); }
+}
 window.ptWhats=async function(i){
   try{
-    var G=await ptData();
-    var L=['📦 *Pulp Tray P4* — '+G.fecha+' / Daily / 일일','',
-      'Existencia / On hand / 재고: *'+ptNum(G.tot)+'*','Valor / Value / 금액: *$'+ptNum(G.val)+'*','Sin stock / Out of stock / 재고 없음: *'+G.ceros+'*',''];
-    G.rows.forEach(function(r){ L.push(r.pn+': '+ptNum(r.stock)+(r.stock<=0?' ⚠️':'')+((r.ent||r.sal)?'  (+'+ptNum(r.ent)+' / -'+ptNum(r.sal)+')':'')); });
-    window.open('https://wa.me/'+PT_TEL[i]+'?text='+encodeURIComponent(L.join('\n')),'_blank');
-  }catch(e){ toast(ptTxt('err')+e.message,'err'); }
+    toast(ptTxt('env'),'ok');
+    var r=await ptImagen(), file=new File([r.blob],'Pulp_Tray_P4.png',{type:'image/png'});
+    var msg='📦 Pulp Tray P4 — '+r.G.fecha;
+    // Celular: abre el menú de compartir (elige WhatsApp y el contacto)
+    if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file],text:msg}); return; }
+    // Computadora: copia la imagen y abre el chat; solo pega con Ctrl+V
+    var copiada=false;
+    try{ await navigator.clipboard.write([new ClipboardItem({'image/png':r.blob})]); copiada=true; }catch(e){ console.warn('clipboard',e); }
+    if(!copiada){ var a=document.createElement('a'); a.href=URL.createObjectURL(r.blob); a.download='Pulp_Tray_P4.png'; a.click(); }
+    window.open('https://wa.me/'+PT_TEL[i]+'?text='+encodeURIComponent(msg),'_blank');
+    toast(copiada?'📋 Imagen copiada: pégala en el chat con Ctrl+V / Paste with Ctrl+V / Ctrl+V로 붙여넣기':'⬇️ Imagen descargada: adjúntala en el chat / attach it / 첨부하세요','ok');
+  }catch(e){ if(e&&e.name==='AbortError') return; toast(ptTxt('err')+e.message,'err'); }
 };
 async function ptGuardar(arr){ await db.collection('ims_config').doc(PT_DOC).set({destinatarios:arr,actualizadoPor:(user&&user.email)||'',actualizadoEn:new Date().toISOString()},{merge:true}); }
 window.ptToggle=async function(email,chk){
