@@ -389,6 +389,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     </div>
     <div class="sw"><input class="si" id="movS" style="text-transform:uppercase" placeholder="O busca el Part Number..." data-t-ph="ph_buscaPN" oninput="this.value=this.value.toUpperCase();renderMovList()" ><span class="si-ic">🔍</span></div>
     <div id="movList" style="max-height:160px;overflow-y:auto;margin-bottom:.7rem"></div>
+    <button type="button" id="btnVCpend" onclick="verPendientesVC()" style="width:100%;padding:.55rem;margin-bottom:.7rem;border-radius:10px;border:1px solid var(--border2);background:transparent;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer">🔄 V en VC (ranurado pendiente)</button>
     <div class="mf" id="movForm">
       <div class="mf-tipo" id="mfTipo">ENTRADA</div>
       <div class="mf-pn" id="mfPN">–</div>
@@ -1303,6 +1304,132 @@ async function ejecutarComponentesMedio(plan, qty, palletId){
   return '';
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   RANURADO  V (virgen) → R (ranurado)   ·   VC1 = Top · VC2 = Bottom
+   1) Salida de una V del IMS P4  = ENVÍO a VC (queda "en traslado" a VC1/VC2)
+   2) Recibir el pallet R de VC1/VC2 = entra la R y se descuenta del traslado
+   3) Lo que sobra en traslado (enviado − recibido) se cierra como MERMA desde el botón "V en VC"
+   El saldo en traslado se calcula con los movimientos (planta4_movimientos, campos vcKey/vcTipo/vcQty),
+   así no hace falta crear colecciones ni reglas nuevas en Firestore.
+   ══════════════════════════════════════════════════════════════════ */
+const TXT_VC = {
+  es:{
+    pregVC:'¿A qué máquina se envía esta V?\n1 = VC1 (Top)\n2 = VC2 (Bottom)',
+    envio:function(vc,pn,desc,qty,a,rpn,pend){return '🔄 ENVÍO A RANURADO · '+vc+'\n\n➖ SALE de IMS P4:\n   '+pn+' · '+desc+'   -'+qty.toLocaleString()+'   ('+a.toLocaleString()+' → '+(a-qty).toLocaleString()+')\n\n➡️ QUEDA EN TRASLADO a '+vc+':   +'+qty.toLocaleString()+'   (pendiente '+pend.toLocaleString()+' → '+(pend+qty).toLocaleString()+')\n   Regresa como '+rpn+' cuando se reciba el pallet de '+vc+'.\n\n¿Confirmar?';},
+    recep:function(id,vc,pn,desc,qty,a,vpn,usa,pend,aviso){return '🔄 RECEPCIÓN DE RANURADO (V → R)\nPallet: '+id+'  ·  '+vc+'\n\n➕ ENTRA:\n   '+pn+' · '+desc+'   +'+qty.toLocaleString()+'   ('+a.toLocaleString()+' → '+(a+qty).toLocaleString()+')\n\n➖ SALE DEL TRASLADO a '+vc+':\n   '+vpn+'   -'+usa.toLocaleString()+'   (pendiente '+pend.toLocaleString()+' → '+(pend-usa).toLocaleString()+')\n'+(aviso?'\n⚠️ AVISO:\n - '+aviso+'\n':'')+'\n✋ NO se toca ningún otro material.\n\n¿Confirmar? (Cancelar = no se registra nada y el pallet sigue PENDIENTE)';},
+    avisoExc:function(vc,qty,pend){return 'Se reciben '+qty.toLocaleString()+' pzs R pero solo hay '+pend.toLocaleString()+' V en traslado a '+vc+' (diferencia '+(qty-pend).toLocaleString()+'). Revisa que el envío de V a '+vc+' esté capturado.';},
+    btn:'🔄 V en VC (ranurado pendiente)', titulo:'🔄 V en VC · ranurado', vacio:'No hay movimientos de ranurado todavía.',
+    env:'Enviadas', rec:'Recibidas (R)', mer:'Merma', pen:'Pendiente', cerrar:'Cerrar → merma', cerrarX:'Cerrar',
+    cierre:function(vc,pn,env,rec,pend){return '🧾 CIERRE DE RANURADO · '+vc+'\n\n'+pn+'\nEnviadas a '+vc+': '+env.toLocaleString()+'\nRecibidas como R: '+rec.toLocaleString()+'\n\nDIFERENCIA = MERMA: '+pend.toLocaleString()+' pzs\n\nSe registra como merma (el stock de V NO cambia: ya salió al enviar).\n¿Confirmar?';},
+    ok:'✅ Merma de ranurado registrada', fail:'❌ No se pudo registrar la merma: '
+  },
+  en:{
+    pregVC:'Which machine is this V being sent to?\n1 = VC1 (Top)\n2 = VC2 (Bottom)',
+    envio:function(vc,pn,desc,qty,a,rpn,pend){return '🔄 SEND TO SLOTTING · '+vc+'\n\n➖ LEAVES IMS P4:\n   '+pn+' · '+desc+'   -'+qty.toLocaleString()+'   ('+a.toLocaleString()+' → '+(a-qty).toLocaleString()+')\n\n➡️ STAYS IN TRANSFER to '+vc+':   +'+qty.toLocaleString()+'   (pending '+pend.toLocaleString()+' → '+(pend+qty).toLocaleString()+')\n   Comes back as '+rpn+' when the '+vc+' pallet is received.\n\nConfirm?';},
+    recep:function(id,vc,pn,desc,qty,a,vpn,usa,pend,aviso){return '🔄 SLOTTING RECEIPT (V → R)\nPallet: '+id+'  ·  '+vc+'\n\n➕ IN:\n   '+pn+' · '+desc+'   +'+qty.toLocaleString()+'   ('+a.toLocaleString()+' → '+(a+qty).toLocaleString()+')\n\n➖ OUT OF TRANSFER to '+vc+':\n   '+vpn+'   -'+usa.toLocaleString()+'   (pending '+pend.toLocaleString()+' → '+(pend-usa).toLocaleString()+')\n'+(aviso?'\n⚠️ WARNING:\n - '+aviso+'\n':'')+'\n✋ No other material is touched.\n\nConfirm? (Cancel = nothing is recorded and the pallet stays PENDING)';},
+    avisoExc:function(vc,qty,pend){return 'Receiving '+qty.toLocaleString()+' R pcs but only '+pend.toLocaleString()+' V are in transfer to '+vc+' (difference '+(qty-pend).toLocaleString()+'). Check that the V shipment to '+vc+' was recorded.';},
+    btn:'🔄 V in VC (slotting pending)', titulo:'🔄 V in VC · slotting', vacio:'No slotting movements yet.',
+    env:'Sent', rec:'Received (R)', mer:'Scrap', pen:'Pending', cerrar:'Close → scrap', cerrarX:'Close',
+    cierre:function(vc,pn,env,rec,pend){return '🧾 SLOTTING CLOSE · '+vc+'\n\n'+pn+'\nSent to '+vc+': '+env.toLocaleString()+'\nReceived as R: '+rec.toLocaleString()+'\n\nDIFFERENCE = SCRAP: '+pend.toLocaleString()+' pcs\n\nRecorded as scrap (V stock does NOT change: it already left when sent).\nConfirm?';},
+    ok:'✅ Slotting scrap recorded', fail:'❌ Could not record the scrap: '
+  },
+  ko:{
+    pregVC:'이 V를 어느 설비로 보냅니까?\n1 = VC1 (Top)\n2 = VC2 (Bottom)',
+    envio:function(vc,pn,desc,qty,a,rpn,pend){return '🔄 슬롯 가공 출고 · '+vc+'\n\n➖ IMS P4 출고:\n   '+pn+' · '+desc+'   -'+qty.toLocaleString()+'   ('+a.toLocaleString()+' → '+(a-qty).toLocaleString()+')\n\n➡️ '+vc+' 이동 중:   +'+qty.toLocaleString()+'   (대기 '+pend.toLocaleString()+' → '+(pend+qty).toLocaleString()+')\n   '+vc+' 팔레트 입고 시 '+rpn+'(으)로 돌아옵니다.\n\n확인하시겠습니까?';},
+    recep:function(id,vc,pn,desc,qty,a,vpn,usa,pend,aviso){return '🔄 슬롯 가공 입고 (V → R)\n팔레트: '+id+'  ·  '+vc+'\n\n➕ 입고:\n   '+pn+' · '+desc+'   +'+qty.toLocaleString()+'   ('+a.toLocaleString()+' → '+(a+qty).toLocaleString()+')\n\n➖ '+vc+' 이동분 차감:\n   '+vpn+'   -'+usa.toLocaleString()+'   (대기 '+pend.toLocaleString()+' → '+(pend-usa).toLocaleString()+')\n'+(aviso?'\n⚠️ 경고:\n - '+aviso+'\n':'')+'\n✋ 다른 자재는 변경되지 않습니다.\n\n확인하시겠습니까? (취소 = 아무것도 기록되지 않으며 팔레트는 대기 상태 유지)';},
+    avisoExc:function(vc,qty,pend){return 'R '+qty.toLocaleString()+'개를 입고하지만 '+vc+' 이동 중인 V는 '+pend.toLocaleString()+'개뿐입니다 (차이 '+(qty-pend).toLocaleString()+'). '+vc+'로의 V 출고가 입력되었는지 확인하세요.';},
+    btn:'🔄 VC 내 V (슬롯 대기)', titulo:'🔄 VC 내 V · 슬롯 가공', vacio:'아직 슬롯 가공 이동이 없습니다.',
+    env:'출고', rec:'입고 (R)', mer:'폐기', pen:'대기', cerrar:'마감 → 폐기', cerrarX:'마감',
+    cierre:function(vc,pn,env,rec,pend){return '🧾 슬롯 가공 마감 · '+vc+'\n\n'+pn+'\n'+vc+' 출고: '+env.toLocaleString()+'\nR 입고: '+rec.toLocaleString()+'\n\n차이 = 폐기: '+pend.toLocaleString()+'개\n\n폐기로 기록됩니다 (V 재고는 변하지 않음: 출고 시 이미 차감됨).\n확인하시겠습니까?';},
+    ok:'✅ 슬롯 가공 폐기 기록됨', fail:'❌ 폐기를 기록하지 못했습니다: '
+  }
+};
+function _tvc(){ return TXT_VC[IMS_LANG] || TXT_VC.es; }
+function _nUvc(x){ return String(x||'').trim().toUpperCase(); }
+/* Base del PN sin la letra final V/R (GH69-46625V → GH69-46625). '' si no termina en V/R */
+function vcBase(pn){ const p=_nUvc(pn); return /[VR]$/.test(p) ? p.slice(0,-1) : ''; }
+/* ¿Es una V (virgen) que tiene su R pareja en el IMS? */
+function esVirgenVC(item){ const p=_nUvc(item.pn); if(!/V$/.test(p)) return false; const b=p.slice(0,-1); return items.some(function(i){ return _nUvc(i.pn)===b+'R'; }); }
+/* ¿Es una R (ranurado) que tiene su V pareja en el IMS? */
+function esRanuradoVC(item){ const p=_nUvc(item.pn); if(!/R$/.test(p) || _nUvc(item.desc).indexOf('RANURADO')<0) return false; const b=p.slice(0,-1); return items.some(function(i){ return _nUvc(i.pn)===b+'V'; }); }
+function vcDeItem(item){ const d=_nUvc(item.desc); if(d.indexOf('TOP')>=0) return 'VC1'; if(d.indexOf('BOTTOM')>=0) return 'VC2'; return ''; }
+/* Suma los movimientos de ranurado de una llave (VC|BASE) o de todas */
+async function vcResumen(key){
+  const r = {};
+  const q = key ? db.collection('planta4_movimientos').where('vcKey','==',key)
+                : db.collection('planta4_movimientos').where('vcTipo','in',['ENVIO','RECIBO','MERMA']);
+  const snap = await q.get();
+  snap.forEach(function(d){
+    const m=d.data(); if(!m.vcKey) return;
+    const o = r[m.vcKey] || (r[m.vcKey]={env:0,rec:0,mer:0});
+    const n = Number(m.vcQty)||0;
+    if(m.vcTipo==='ENVIO') o.env+=n; else if(m.vcTipo==='RECIBO') o.rec+=n; else if(m.vcTipo==='MERMA') o.mer+=n;
+  });
+  Object.keys(r).forEach(function(k){ r[k].pen = r[k].env - r[k].rec - r[k].mer; });
+  return r;
+}
+async function vcPendiente(vc, base){
+  const key = vc+'|'+base;
+  const r = await vcResumen(key);
+  return r[key] ? Math.max(0, r[key].pen) : 0;
+}
+/* Panel "V en VC": saldo por máquina y parte + cierre de diferencia como merma */
+async function verPendientesVC(){
+  const L=_tvc();
+  let r;
+  try { r = await vcResumen(null); } catch(e){ alert(L.fail+(e&&e.message?e.message:e)); return; }
+  const keys = Object.keys(r).sort();
+  const ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+  let h = '<div style="background:#171a23;border:1px solid #f5a623;border-radius:14px;padding:18px;max-width:460px;width:100%;max-height:85vh;overflow:auto;color:#e8eaf0;font-family:inherit">'
+        + '<div style="font-size:17px;font-weight:700;margin-bottom:10px">'+L.titulo+'</div>';
+  if(!keys.length) h += '<div style="font-size:13px;color:#aab;margin:10px 0">'+L.vacio+'</div>';
+  keys.forEach(function(k,ix){
+    const p=k.split('|'), o=r[k];
+    const vItem = items.find(function(i){ return _nUvc(i.pn)===p[1]+'V'; });
+    h += '<div style="border:1px solid #3a4054;border-radius:10px;padding:10px;margin-bottom:8px">'
+       + '<div style="font-weight:700">'+p[0]+' · '+p[1]+'V → '+p[1]+'R</div>'
+       + '<div style="font-size:12px;color:#aab;margin:4px 0">'+(vItem?vItem.desc:'')+'</div>'
+       + '<div style="font-size:13px">'+L.env+': <b>'+o.env.toLocaleString()+'</b> · '+L.rec+': <b>'+o.rec.toLocaleString()+'</b> · '+L.mer+': <b>'+o.mer.toLocaleString()+'</b></div>'
+       + '<div style="font-size:15px;margin-top:4px;color:'+(o.pen>0?'#f5a623':'#4ade80')+'">'+L.pen+': <b>'+o.pen.toLocaleString()+'</b></div>'
+       + (o.pen>0 ? '<button data-ix="'+ix+'" class="vcCerrarBtn" style="margin-top:8px;width:100%;padding:9px;border-radius:8px;border:none;background:#f5a623;color:#111;font-weight:700;cursor:pointer">'+L.cerrar+'</button>' : '')
+       + '</div>';
+  });
+  h += '<button id="vcCerrarPanel" style="width:100%;padding:10px;border-radius:8px;border:1px solid #3a4054;background:transparent;color:#e8eaf0;cursor:pointer;margin-top:4px">'+L.cerrarX+'</button></div>';
+  ov.innerHTML = h;
+  document.body.appendChild(ov);
+  ov.querySelector('#vcCerrarPanel').onclick = function(){ document.body.removeChild(ov); };
+  ov.querySelectorAll('.vcCerrarBtn').forEach(function(b){
+    b.onclick = async function(){
+      const k = keys[parseInt(b.getAttribute('data-ix'))], p = k.split('|');
+      document.body.removeChild(ov);
+      await cerrarRanuradoVC(p[0], p[1]);
+    };
+  });
+}
+/* Cierra la diferencia (enviado − recibido) como merma. Pide contraseña de autorización. */
+async function cerrarRanuradoVC(vc, base){
+  const L=_tvc();
+  if (user && user.role === 'viewer') { toast('Solo lectura','err'); return; }
+  const key = vc+'|'+base;
+  let r; try { r = (await vcResumen(key))[key]; } catch(e){ alert(L.fail+(e&&e.message?e.message:e)); return; }
+  if(!r || r.pen<=0){ toast('Sin pendiente','info'); return; }
+  const vItem = items.find(function(i){ return _nUvc(i.pn)===base+'V'; });
+  if(!vItem){ alert(L.fail+base+'V'); return; }
+  if(!(await pedirClaveManual(vItem.pn, r.pen, 'A'))) return;
+  if(!confirm(L.cierre(vc, vItem.pn+' · '+vItem.desc, r.env, r.rec, r.pen))) return;
+  const iso = new Date().toISOString();
+  const mov = {tipo:'M', pn:vItem.pn, desc:vItem.desc, familia:vItem.familia, qty:r.pen, fecha:iso, user:user.name,
+               ref:'MERMA RANURADO · '+vc, stock:vItem.actual, loc:'Merma '+vc, origen:'MERMA_RANURADO',
+               vcTipo:'MERMA', vc:vc, vcKey:key, vcQty:r.pen, vcEnviadas:r.env, vcRecibidas:r.rec};
+  try { await db.collection('planta4_movimientos').add(mov); }
+  catch(e){ alert(L.fail+(e&&e.message?e.message:e)); return; }
+  movs.unshift(mov); saveLocal();
+  try { renderHist(); } catch(e){}
+  toast(L.ok+': '+r.pen.toLocaleString()+' · '+vItem.pn,'ok');
+}
+window.verPendientesVC = verPendientesVC;
+
 function checkViewerPass() {
   const pass = document.getElementById('viewerPass').value;
   const err = document.getElementById('viewerErr');
@@ -1888,6 +2015,8 @@ function applyIMSTranslations(){
   document.querySelectorAll('[data-t-title]').forEach(function(el){
     el.setAttribute('title', tt(el.dataset.tTitle));
   });
+  var _bVC = document.getElementById('btnVCpend');
+  if (_bVC && typeof _tvc === 'function') _bVC.textContent = _tvc().btn;
   if (typeof user !== 'undefined' && user) {
     if (typeof updateDash==='function' && typeof items!=='undefined' && items && document.getElementById('dL')) updateDash();
     if (typeof renderInv==='function' && typeof items!=='undefined' && items) renderInv();
@@ -2258,7 +2387,19 @@ async function doMovInner() {
   if (movTipo==='S'&&qty>item.actual) { toast('Stock insuficiente: '+item.actual.toLocaleString()+' disponibles','err'); return; }
   const dest = document.getElementById('mfDest').value;
   const ref = document.getElementById('mfRef').value.trim();
-  let palletInfo = null, claveManualOk = false, planMedio = null;
+  let palletInfo = null, claveManualOk = false, planMedio = null, envioVC = null, recepVC = null;
+  /* RANURADO · Salida de una V = ENVÍO a VC1/VC2 (queda en traslado hasta que regrese como R) */
+  if (movTipo==='T' && esVirgenVC(item)) {
+    const Lvc = _tvc();
+    if (qty > (parseFloat(item.actual)||0)) { toast('Stock insuficiente: '+(parseFloat(item.actual)||0).toLocaleString()+' disponibles','err'); return; }
+    let vc = vcDeItem(item);
+    if (!vc) { const rr = prompt(Lvc.pregVC, '1'); if (rr===null) return; vc = (String(rr).trim()==='2') ? 'VC2' : 'VC1'; }
+    const baseVC = vcBase(item.pn);
+    let pendVC = 0;
+    try { pendVC = await vcPendiente(vc, baseVC); } catch(e) { console.error(e); }
+    if (!confirm(Lvc.envio(vc, item.pn, item.desc, qty, parseFloat(item.actual)||0, baseVC+'R', pendVC))) return;
+    envioVC = {vc:vc, base:baseVC, qty:qty};
+  }
   if (scanPallet && movTipo==='E' && ref.toUpperCase()===scanPallet.id.toUpperCase()) {
     const candL = (qty===scanPallet.qty) ? buscarEntradaManual(item.pn,qty) : null;
     if (candL && confirm(txtLigar(candL,scanPallet.id,qty))) {
@@ -2271,7 +2412,28 @@ async function doMovInner() {
     if (!rc.ok) { limpiarFormMov(); alert('⚠️ '+rc.msg); return; }
     palletInfo = {id:scanPallet.id, maq:rc.maq||'', modelo:rc.modelo||'', planta:rc.planta||''};
     // Si el pallet ya venía recibido de otra planta (P3), sus componentes ya se consumieron allá: no se descuenta nada en P4
+    /* RANURADO · pallet R que regresa de VC1/VC2: entra la R y se descuenta del traslado (la V ya salió al enviarla) */
+    let vcRec = '';
+    if (!rc.reRecepcion && esRanuradoVC(item)) {
+      vcRec = /^VC[12]$/i.test(palletInfo.maq||'') ? String(palletInfo.maq).toUpperCase() : vcDeItem(item);
+    }
+    if (vcRec) {
+      const Lvc = _tvc();
+      const baseR = vcBase(item.pn);
+      const vItemR = items.find(function(i){ return _nUvc(i.pn)===baseR+'V'; });
+      let pendR = 0;
+      try { pendR = await vcPendiente(vcRec, baseR); } catch(e) { console.error(e); }
+      const usaR = Math.min(qty, pendR);
+      const avisoR = (qty > pendR) ? Lvc.avisoExc(vcRec, qty, pendR) : '';
+      planMedio = {aplica:false, comps:[], problemas:[], modelo:palletInfo.modelo};
+      if (!confirm(Lvc.recep(palletInfo.id, vcRec, item.pn, item.desc, qty, parseFloat(item.actual)||0, vItemR ? (vItemR.pn+' · '+vItemR.desc) : (baseR+'V'), usaR, pendR, avisoR))) {
+        await liberarPallet(palletInfo.id); scanPallet=null; limpiarFormMov();
+        toast('Recepción cancelada: el pallet sigue PENDIENTE','err'); return;
+      }
+      recepVC = {vc:vcRec, base:baseR, qty:usaR};
+    } else {
     planMedio = rc.reRecepcion ? {aplica:false, comps:[], problemas:[], modelo:palletInfo.modelo} : await planComponentesMedio(item, qty, palletInfo.modelo);
+    }
     if (rc.reRecepcion) toast('📦 Pallet recibido antes en '+rc.desde+' → entrada a P4','info');
     if (planMedio.aplica && !confirm(textoPlanMedio(item, qty, palletInfo.id, planMedio))) {
       await liberarPallet(palletInfo.id); scanPallet=null; limpiarFormMov();
@@ -2290,15 +2452,18 @@ async function doMovInner() {
   const antes = {entradas:item.entradas, salidas:item.salidas, actual:item.actual, ubicacion:item.ubicacion};
   const delta = {entradas:0, salidas:0, actual:0};
   if (movTipo==='E') { item.entradas+=qty; item.actual+=qty; delta.entradas=qty; delta.actual=qty; }
-  else if (movTipo==='T') { /* Traslado: solo cambia la ubicación; el stock NO cambia (como indica la guía) */ }
+  else if (movTipo==='T') { /* Traslado: solo cambia la ubicación; el stock NO cambia (como indica la guía). EXCEPTO el envío de V a VC: sale del stock del IMS P4 (queda en traslado a VC, no es consumo) */
+    if (envioVC) { item.actual-=qty; delta.actual=-qty; } }
   else { item.salidas+=qty; item.actual-=qty; delta.salidas=qty; delta.actual=-qty; }  // S
-  if (movTipo==='E'||movTipo==='T') item.ubicacion = dest;
+  if (movTipo==='E'||(movTipo==='T'&&!envioVC)) item.ubicacion = dest;
   const hItem = {tipo:movTipo,fecha:new Date().toISOString(),qty,loc:item.ubicacion,user:user.name,ref};
   if (!item.historial) item.historial=[];
   item.historial.push(hItem);
   const mov = {tipo:movTipo,pn:item.pn,desc:item.desc,familia:item.familia,qty,fecha:new Date().toISOString(),user:user.name,ref,stock:item.actual,loc:item.ubicacion};
   if (palletInfo) { mov.origen='LINEA'; mov.pallet=palletInfo.id; mov.maq=palletInfo.maq; mov.planta=palletInfo.planta||''; }
   else if (claveManualOk) { mov.origen='MANUAL'; mov.autorizado=true; }
+  if (envioVC) { mov.origen='ENVIO_VC'; mov.vcTipo='ENVIO'; mov.vc=envioVC.vc; mov.vcKey=envioVC.vc+'|'+envioVC.base; mov.vcQty=envioVC.qty; mov.loc=envioVC.vc; mov.ref=(ref?ref+' · ':'')+'TRASLADO A '+envioVC.vc; }
+  if (recepVC) { mov.vcTipo='RECIBO'; mov.vc=recepVC.vc; mov.vcKey=recepVC.vc+'|'+recepVC.base; mov.vcQty=recepVC.qty; }
   movs.unshift(mov);
   saveLocal();
   const res = await pushMov(mov, delta, hItem);
