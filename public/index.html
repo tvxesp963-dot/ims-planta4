@@ -911,7 +911,9 @@ async function _saveEditCore() {
   const newEstatus = document.getElementById('editEstatus').value;
   const newUbic = document.getElementById('editUbic').value.trim() || 'Almacén';
   if (!newPN) { toast('Part Number requerido','err'); return; }
-  const newStock = newIni + newEnt - newSal;
+  // El stock solo se recalcula (Inicial + Entradas - Salidas) si el master tocó esos campos.
+  // Si no, se conserva el stock guardado: hay partes con ajustes físicos donde Inicial+Entradas-Salidas NO es igual al stock.
+  const newStock = (esMaster && window._editTouched) ? (newIni + newEnt - newSal) : (parseFloat(oldItemRef.actual) || 0);
 
   const oldItem = items[idx];
   // Detectar cambios para historial (solo estatus y ubicación pueden cambiar aquí)
