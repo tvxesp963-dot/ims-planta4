@@ -11,7 +11,7 @@
 /* ===== CONTROL DE VERSION (evita que celulares/laptops se queden con version vieja en cache) =====
    Cada vez que subas un index.html actualizado, cambia este numero (ej: 20260711).
    El sistema detecta el cambio y recarga automaticamente la version nueva. */
-var APP_VERSION = "20261116e";
+var APP_VERSION = "20261124c";
 (function(){
   try{
     var key = 'ims_p4_version';
@@ -231,11 +231,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .mrow:last-of-type{border:none}
 .ml{font-size:11px;color:var(--text2)}.mv{font-size:11px;font-weight:600}
 .modal-close{width:100%;margin-top:1rem;padding:11px;background:var(--bg3);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-size:14px;cursor:pointer}
-.toast{position:fixed;top:62px;left:50%;transform:translateX(-50%);background:var(--bg4);border:1px solid var(--border2);border-radius:9px;padding:10px 18px;font-size:12px;font-weight:500;z-index:600;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;max-width:90vw}
+.toast{position:fixed;top:62px;left:50%;transform:translateX(-50%);background:var(--bg4);border:1px solid var(--border2);border-radius:9px;padding:10px 18px;font-size:12px;font-weight:500;z-index:100000;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;max-width:90vw}
 .toast.show{opacity:1}
 .toast.ok{border-color:rgba(0,230,118,.4);color:var(--green)}
 .toast.err{border-color:rgba(255,68,68,.4);color:var(--red)}
 .toast.info{border-color:rgba(77,166,255,.4);color:var(--accent)}
+.toast.warn{border-color:rgba(255,186,0,.5);color:#FFBA00}
 .empty{text-align:center;padding:2rem;color:var(--text2);font-size:12px}
 .divider{height:1px;background:var(--border);margin:.7rem 0}
 .qr-center{display:none;flex-direction:column;align-items:center;gap:.8rem}
@@ -501,6 +502,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div class="ac" onclick="abrirCargaExcel()" style="border-color:rgba(0,230,118,.3)"><div class="ac-i">📥</div><div class="ac-l" id="t-acCargarExcel">Cargar Excel</div><div class="ac-s" id="t-acCargarExcelSub">Reemplazar inventario</div></div>
       <div class="ac" onclick="abrirImportPrecios()" style="border-color:rgba(255,179,0,.4)"><div class="ac-i">💲</div><div class="ac-l" id="t-acImportPrecios">Importar Precios</div><div class="ac-s" id="t-acImportPreciosSub">Desde Excel PN+Price</div></div>
       <div class="ac" onclick="abrirImportLoc()" style="border-color:rgba(0,230,118,.4)"><div class="ac-i">📍</div><div class="ac-l" id="t-acImportLoc">Importar Locaciones</div><div class="ac-s" id="t-acImportLocSub">Desde Excel PN+Loc1+Loc2+Loc3</div></div>
+      <div class="ac" onclick="abrirLiberarPallets()" style="border-color:rgba(255,179,0,.5)"><div class="ac-i">🔓</div><div class="ac-l" id="t-acLibPal">Liberar pallets</div><div class="ac-s" id="t-acLibPalSub">Revertir recepción</div></div>
       <div class="ac" onclick="abrirConfigMonitor()" style="border-color:rgba(226,75,74,.4)"><div class="ac-i">⚙️</div><div class="ac-l" id="t-acStockMin">Stock mínimo</div><div class="ac-s" id="t-acStockMinSub">Configurar límite crítico</div></div>
     </div>
     <div class="sh" id="t-shUsuarios">Usuarios IMS</div>
@@ -862,12 +864,17 @@ function closeEdit() { document.getElementById('modalEdit').style.display = 'non
 window.closeEdit = closeEdit;
 
 async function saveEdit() {
+  var btnG = document.getElementById('t-btnGuardar2');
+  var txtG = btnG ? btnG.textContent : '';
+  if (btnG) { if (btnG.disabled) return; btnG.disabled = true; btnG.textContent = '⏳ Guardando...'; }
   try {
     toast('Guardando...', 'info');
     await _saveEditCore();
   } catch(e) {
     console.error('saveEdit:', e);
     toast('❌ Error al guardar: ' + (e && e.message ? e.message : e), 'err');
+  } finally {
+    if (btnG) { btnG.disabled = false; btnG.textContent = txtG; }
   }
 }
 async function _saveEditCore() {
@@ -946,13 +953,13 @@ async function _saveEditCore() {
       const oldDocId = oldItem._docId || getDocId(oldItem.pn, oldItem.desc);
       const sameKey = (oldItem.pn||'') === newPN && (oldItem.desc||'') === newDesc;
       const newDocId = sameKey ? oldDocId : getDocId(newPN, newDesc);
-      if (oldDocId !== newDocId) {
-        await _withTimeout(db.collection('planta4_inventario').doc(oldDocId).delete());
-      }
       // Quitar _docId antes de guardar (es campo interno)
       var dataGuardar = Object.assign({}, items[idx]);
       delete dataGuardar._docId;
-      await _withTimeout(db.collection('planta4_inventario').doc(newDocId).set(dataGuardar, {merge:true}));
+      await _withTimeout(db.collection('planta4_inventario').doc(newDocId).set(dataGuardar, {merge:true}), 15000);
+      if (oldDocId !== newDocId) {
+        await _withTimeout(db.collection('planta4_inventario').doc(oldDocId).delete(), 15000);
+      }
       items[idx]._docId = newDocId;
     } catch(e) { console.error('saveEdit Firestore:', e); toast('Local OK. Firebase: '+e.message, 'warn'); }
   }
@@ -1182,6 +1189,104 @@ async function liberarPallet(id){
     await db.collection('pallets_medio').doc(id).update({status:'PENDING', recibidoEn:D, recibidoPor:D, recibidoFecha:D});
   }catch(e){ console.error('liberarPallet:', e); }
 }
+
+/* 🔓 LIBERAR PALLETS (solo admin): revierte la recepción de un pallet en P4 para poder escanearlo de nuevo.
+   Útil cuando el inventario se borró o se capturó mal. Si el pallet antes lo recibió otra planta (P3), vuelve a ese estado. */
+const TXT_LP = {
+  es:{ t:'Liberar pallets', nota:'Pallets recibidos en P4 hoy. Libera solo los que YA NO tienen su inventario en el IMS (se borró o se capturó mal): si el stock sigue ahí, al escanear de nuevo se duplicaría.', hoy:'Recibidos hoy en P4', vacio:'No hay pallets recibidos hoy en P4.', porId:'O escribe el pallet (varios separados por coma o espacio)', btn:'Liberar seleccionados', btnId:'Liberar por ID', cerrar:'Cerrar', sinSel:'Selecciona o escribe al menos un pallet.', conf:'¿Liberar {n} pallet(s)? Podrán escanearse otra vez en el IMS P4.', ok:'{n} pallet(s) liberado(s)', noEx:'No existe: {id}', noRec:'{id} no está recibido en P4', soloAdmin:'Solo admin puede liberar pallets', por:'Recibió', cant:'Cant.' },
+  en:{ t:'Release pallets', nota:'Pallets received in P4 today. Release only those whose inventory is NO LONGER in the IMS (deleted or entered wrong): if the stock is still there, scanning again would duplicate it.', hoy:'Received today in P4', vacio:'No pallets received in P4 today.', porId:'Or type the pallet (several separated by comma or space)', btn:'Release selected', btnId:'Release by ID', cerrar:'Close', sinSel:'Select or type at least one pallet.', conf:'Release {n} pallet(s)? They can be scanned again in IMS P4.', ok:'{n} pallet(s) released', noEx:'Does not exist: {id}', noRec:'{id} is not received in P4', soloAdmin:'Only admin can release pallets', por:'Received by', cant:'Qty' },
+  ko:{ t:'팔레트 해제', nota:'오늘 P4에서 입고된 팔레트입니다. 재고가 IMS에서 더 이상 없는 팔레트만 해제하세요(삭제되었거나 잘못 입력됨). 재고가 남아 있으면 다시 스캔 시 중복됩니다.', hoy:'오늘 P4 입고', vacio:'오늘 P4에서 입고된 팔레트가 없습니다.', porId:'또는 팔레트를 입력(여러 개는 쉼표 또는 공백으로 구분)', btn:'선택 항목 해제', btnId:'ID로 해제', cerrar:'닫기', sinSel:'팔레트를 하나 이상 선택하거나 입력하세요.', conf:'{n}개 팔레트를 해제하시겠습니까? IMS P4에서 다시 스캔할 수 있습니다.', ok:'{n}개 팔레트 해제됨', noEx:'존재하지 않음: {id}', noRec:'{id}은(는) P4에서 입고되지 않았습니다', soloAdmin:'관리자만 팔레트를 해제할 수 있습니다', por:'입고자', cant:'수량' }
+};
+Object.assign(TXT_LP.es,{ pend:'Pallets pendientes (etiquetados, sin escanear)', pendNota:'Últimos 3 días. El BOM Simulator los suma como inventario provisional de P4. Anula solo los que NO son reales (prueba o ya no existen); un pallet real se escanea.', pendVacio:'No hay pallets pendientes en los últimos 3 días.', btnAnu:'Anular seleccionados', sinSelAnu:'Selecciona al menos un pallet pendiente.', confAnu:'¿Anular {n} pallet(s) pendiente(s)? Ya no se podrán recibir.', okAnu:'{n} pallet(s) anulado(s)', noPend:'{id} no está pendiente', parteL:'Parte', total:'Total pendiente' });
+Object.assign(TXT_LP.en,{ pend:'Pending pallets (labeled, not scanned)', pendNote:'Last 3 days. The BOM Simulator adds them as provisional P4 inventory. Void only those that are NOT real (test or no longer exist); a real pallet should be scanned.', pendVacio:'No pending pallets in the last 3 days.', btnAnu:'Void selected', sinSelAnu:'Select at least one pending pallet.', confAnu:'Void {n} pending pallet(s)? They can no longer be received.', okAnu:'{n} pallet(s) voided', noPend:'{id} is not pending', parteL:'Part', total:'Pending total' });
+Object.assign(TXT_LP.ko,{ pend:'대기 중인 팔레트 (라벨 출력, 미스캔)', pendNota:'최근 3일. BOM 시뮬레이터가 P4 임시 재고로 합산합니다. 실제가 아닌 것(테스트 또는 존재하지 않음)만 무효화하세요. 실제 팔레트는 스캔해야 합니다.', pendVacio:'최근 3일간 대기 중인 팔레트가 없습니다.', btnAnu:'선택 항목 무효화', sinSelAnu:'대기 중인 팔레트를 하나 이상 선택하세요.', confAnu:'{n}개 대기 팔레트를 무효화하시겠습니까? 더 이상 입고할 수 없습니다.', okAnu:'{n}개 팔레트 무효화됨', noPend:'{id}은(는) 대기 상태가 아닙니다', parteL:'부품', total:'대기 합계' });
+async function _anularPend(id){
+  const ref=db.collection('pallets_medio').doc(id), d=await ref.get();
+  if(!d.exists || d.data().status!=='PENDING') return {ok:false,msg:_tlp('noPend',{id:id})};
+  await ref.update({status:'VOID', anuladoPor:(user&&user.name)||'', anuladoFecha:new Date().toISOString(), anuladoMotivo:'Anulado desde Liberar pallets (pendiente)'});
+  return {ok:true};
+}
+function _tlp(k,o){ let s=(TXT_LP[IMS_LANG]||TXT_LP.es)[k]||TXT_LP.es[k]||k; Object.keys(o||{}).forEach(function(x){ s=s.split('{'+x+'}').join(o[x]); }); return s; }
+function _lpEsc(x){ return String(x==null?'':x).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+async function _liberarUno(id){
+  const ref=db.collection('pallets_medio').doc(id), d=await ref.get();
+  if(!d.exists) return {ok:false,msg:_tlp('noEx',{id:id})};
+  const p=d.data(), D=firebase.firestore.FieldValue.delete(), extra={liberadoPor:(user&&user.name)||'',liberadoFecha:new Date().toISOString()};
+  if(p.status!=='RECEIVED' || p.recibidoEn!=='P4') return {ok:false,msg:_tlp('noRec',{id:id})};
+  const rec=(p.recepciones||[]).slice();
+  if(rec.length){ const u=rec.pop(); await ref.update(Object.assign({status:'RECEIVED',recibidoEn:u.planta||'',recibidoPor:u.por||'',recibidoFecha:u.fecha||'',recepciones:rec},extra)); }
+  else await ref.update(Object.assign({status:'PENDING',recibidoEn:D,recibidoPor:D,recibidoFecha:D},extra));
+  try{ await _revP3Msg(id,'liberar pallet'); }catch(e){ console.error(e); }
+  return {ok:true};
+}
+async function abrirLiberarPallets(){
+  if(!user || user.role!=='admin'){ toast(_tlp('soloAdmin'),'err'); return; }
+  const old=document.getElementById('lpOv'); if(old) old.remove();
+  const o=document.createElement('div'); o.id='lpOv';
+  o.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.75);z-index:99999;display:flex;align-items:center;justify-content:center';
+  o.innerHTML='<div style="background:var(--bg2,#0f1830);border:1px solid var(--border,#26345c);border-radius:14px;max-width:560px;width:94%;max-height:90vh;overflow:auto;padding:16px;color:var(--text,#e8eefc)">'+
+    '<div style="font-weight:700;font-size:1rem;margin-bottom:6px">🔓 '+_lpEsc(_tlp('t'))+'</div>'+
+    '<div style="font-size:.72rem;color:var(--text2,#9fb0d6);margin-bottom:10px">'+_lpEsc(_tlp('nota'))+'</div>'+
+    '<div style="font-size:.75rem;font-weight:700;margin-bottom:4px">'+_lpEsc(_tlp('hoy'))+'</div>'+
+    '<div id="lpLista" style="font-size:.74rem;margin-bottom:10px">…</div>'+
+    '<div style="font-size:.75rem;font-weight:700;margin:6px 0 4px;border-top:1px solid var(--border,#26345c);padding-top:10px">⏳ '+_lpEsc(_tlp('pend'))+'</div>'+
+    '<div style="font-size:.72rem;color:var(--text2,#9fb0d6);margin-bottom:6px">'+_lpEsc(_tlp('pendNota'))+'</div>'+
+    '<div id="lpPend" style="font-size:.74rem;margin-bottom:8px">…</div>'+
+    '<button id="lpBtnAnu" style="background:#c0392b;color:#fff;border:none;border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer;margin-bottom:12px">'+_lpEsc(_tlp('btnAnu'))+'</button>'+
+    '<button id="lpBtn" style="background:var(--accent2);color:#fff;border:none;border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer;margin-bottom:12px">'+_lpEsc(_tlp('btn'))+'</button>'+
+    '<div style="font-size:.72rem;color:var(--text2,#9fb0d6);margin-bottom:4px">'+_lpEsc(_tlp('porId'))+'</div>'+
+    '<input id="lpId" type="text" style="width:100%;margin-bottom:8px" autocomplete="off">'+
+    '<button id="lpBtnId" style="background:var(--accent2);color:#fff;border:none;border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer;margin-right:8px">'+_lpEsc(_tlp('btnId'))+'</button><button id="lpCerrar" style="background:transparent;color:var(--text2);border:1px solid var(--border);border-radius:9px;padding:10px 14px;font-weight:600;cursor:pointer">'+_lpEsc(_tlp('cerrar'))+'</button></div>';
+  document.body.appendChild(o);
+  o.querySelector('#lpCerrar').onclick=function(){ o.remove(); };
+  async function cargar(){
+    const box=o.querySelector('#lpLista');
+    try{
+      const ini=new Date(); ini.setHours(0,0,0,0);
+      const q=await db.collection('pallets_medio').where('recibidoFecha','>=',ini.toISOString()).limit(300).get(), rs=[];
+      q.forEach(function(d){ const p=d.data(); if(p.status==='RECEIVED' && p.recibidoEn==='P4') rs.push({id:d.id,p:p}); });
+      rs.sort(function(a,b){ return String(b.p.recibidoFecha).localeCompare(String(a.p.recibidoFecha)); });
+      box.innerHTML = rs.length ? rs.map(function(r){ const f=new Date(r.p.recibidoFecha), hh=isNaN(f)?'':f.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+        return '<label style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border,#26345c)"><input type="checkbox" class="lpChk" value="'+_lpEsc(r.id)+'"><span><b>'+_lpEsc(r.id)+'</b><br><span style="color:var(--text2,#9fb0d6)">'+_lpEsc(r.p.parte||'')+' · '+_lpEsc(_tlp('cant'))+' '+_lpEsc(r.p.cantidad||r.p.qty||'')+' · '+_lpEsc(hh)+' · '+_lpEsc(_tlp('por'))+' '+_lpEsc(r.p.recibidoPor||'')+'</span></span></label>'; }).join('') : _lpEsc(_tlp('vacio'));
+    }catch(e){ box.textContent='⚠️ '+(e&&e.message?e.message:e); }
+  }
+  async function liberar(ids){
+    if(!ids.length){ toast(_tlp('sinSel'),'err'); return; }
+    if(!confirm(_tlp('conf',{n:ids.length}))) return;
+    let ok=0; const fallos=[];
+    for(const id of ids){ try{ const r=await _liberarUno(id); if(r.ok) ok++; else fallos.push(r.msg); }catch(e){ fallos.push(id+': '+(e&&e.message?e.message:e)); } }
+    if(ok) toast(_tlp('ok',{n:ok}),'ok');
+    if(fallos.length) toast(fallos.join(' | '),'err');
+    o.querySelector('#lpId').value=''; await cargar();
+  }
+  o.querySelector('#lpBtn').onclick=function(){ liberar(Array.prototype.map.call(o.querySelectorAll('.lpChk:checked'),function(c){ return c.value; })); };
+  o.querySelector('#lpBtnId').onclick=function(){ liberar(o.querySelector('#lpId').value.split(/[\s,;]+/).filter(Boolean)); };
+  async function cargarPend(){
+    const box=o.querySelector('#lpPend');
+    try{
+      const d3=new Date(); d3.setDate(d3.getDate()-3);
+      const desde=d3.getFullYear()+'-'+String(d3.getMonth()+1).padStart(2,'0')+'-'+String(d3.getDate()).padStart(2,'0');
+      const q=await db.collection('pallets_medio').where('status','==','PENDING').get(), rs=[]; let tot=0;
+      q.forEach(function(d){ const p=d.data(); if(String(p.fecha||'')<desde) return; const qy=Number(p.qty)||0; if(!p.parte||qy<=0) return; tot+=qy; rs.push({id:d.id,p:p,q:qy}); });
+      rs.sort(function(a,b){ return String(b.p.fecha||'').localeCompare(String(a.p.fecha||'')); });
+      box.innerHTML = rs.length ? ('<div style="margin-bottom:4px;color:var(--text2,#9fb0d6)">'+_lpEsc(_tlp('total'))+': <b>'+tot.toLocaleString()+'</b></div>'+rs.map(function(r){
+        return '<label style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border,#26345c)"><input type="checkbox" class="lpChkP" value="'+_lpEsc(r.id)+'"><span><b>'+_lpEsc(r.id)+'</b><br><span style="color:var(--text2,#9fb0d6)">'+_lpEsc(r.p.parte)+' · '+_lpEsc(_tlp('cant'))+' '+r.q.toLocaleString()+' · '+_lpEsc(r.p.fecha||'')+(r.p.maquina?' · '+_lpEsc(r.p.maquina):'')+(r.p.desc?' · '+_lpEsc(r.p.desc):'')+'</span></span></label>'; }).join('')) : _lpEsc(_tlp('pendVacio'));
+    }catch(e){ box.textContent='⚠️ '+(e&&e.message?e.message:e); }
+  }
+  o.querySelector('#lpBtnAnu').onclick=async function(){
+    const ids=Array.prototype.map.call(o.querySelectorAll('.lpChkP:checked'),function(c){ return c.value; });
+    if(!ids.length){ toast(_tlp('sinSelAnu'),'err'); return; }
+    if(!confirm(_tlp('confAnu',{n:ids.length}))) return;
+    let ok=0; const fallos=[];
+    for(const id of ids){ try{ const r=await _anularPend(id); if(r.ok) ok++; else fallos.push(r.msg); }catch(e){ fallos.push(id+': '+(e&&e.message?e.message:e)); } }
+    if(ok) toast(_tlp('okAnu',{n:ok}),'ok');
+    if(fallos.length) toast(fallos.join(' | '),'err');
+    await cargarPend();
+  };
+  cargar(); cargarPend();
+}
+window.abrirLiberarPallets = abrirLiberarPallets;
+
 
 // ── AUTH ──
 
@@ -1585,6 +1690,7 @@ const IMS_TRANSLATIONS = {
     t_acLimpiarMovs: "Limpiar movs.",
     t_acSoloAdmin: "Solo Admin",
     t_acSyncSub: "Subir todos los items",
+    t_acLibPal: "Liberar pallets", t_acLibPalSub: "Revertir recepción",
     t_acLimpiarDup: "Limpiar duplicados",
     t_acLimpiarDupSub: "Eliminar IDs viejos",
     t_acReset: "Reset stock",
@@ -1749,6 +1855,7 @@ const IMS_TRANSLATIONS = {
     t_acLimpiarMovs: "Clear moves",
     t_acSoloAdmin: "Admin only",
     t_acSyncSub: "Upload all items",
+    t_acLibPal: "Release pallets", t_acLibPalSub: "Undo receipt",
     t_acLimpiarDup: "Clean duplicates",
     t_acLimpiarDupSub: "Remove old IDs",
     t_acReset: "Reset stock",
@@ -1913,6 +2020,7 @@ const IMS_TRANSLATIONS = {
     t_acLimpiarMovs: "이동 기록 삭제",
     t_acSoloAdmin: "관리자 전용",
     t_acSyncSub: "전체 항목 업로드",
+    t_acLibPal: "팔레트 해제", t_acLibPalSub: "입고 되돌리기",
     t_acLimpiarDup: "중복 항목 정리",
     t_acLimpiarDupSub: "이전 ID 제거",
     t_acReset: "재고 초기화",
@@ -2410,7 +2518,7 @@ async function doMovInner() {
     }
     const rc = await reclamarPallet();
     if (!rc.ok) { limpiarFormMov(); alert('⚠️ '+rc.msg); return; }
-    palletInfo = {id:scanPallet.id, maq:rc.maq||'', modelo:rc.modelo||'', planta:rc.planta||''};
+    palletInfo = {id:scanPallet.id, maq:rc.maq||'', modelo:rc.modelo||'', planta:rc.planta||'', desde:rc.desde||''};
     // Si el pallet ya venía recibido de otra planta (P3), sus componentes ya se consumieron allá: no se descuenta nada en P4
     /* RANURADO · pallet R que regresa de VC1/VC2: entra la R y se descuenta del traslado (la V ya salió al enviarla) */
     let vcRec = '';
@@ -2480,14 +2588,197 @@ async function doMovInner() {
   let avisoComp = '';
   if (planMedio && planMedio.aplica && planMedio.comps.length) avisoComp = await ejecutarComponentesMedio(planMedio, qty, palletInfo.id);
   if (movTipo==='E') await marcarPalletRecibido(ref);
+  let avisoP3 = '';
+  if (movTipo==='E' && palletInfo && _esPalletP3(palletInfo)) {
+    const r3 = await descontarP3(item.pn, qty, palletInfo.id);
+    if (r3.ok && !r3.ya) toast(_t3('ok',{q:qty.toLocaleString(), pn:item.pn}),'ok');
+    else if (!r3.ok && !r3.omit) avisoP3 = _t3('fail',{m:r3.msg, q:qty.toLocaleString(), pn:item.pn});
+  }
   updateDash(); renderInv(); renderHist(); renderLocMap();
   const lbl = {E:'✅ Entrada',S:'📤 Salida',T:'🔀 Traslado'};
   toast(lbl[movTipo]+': '+qty.toLocaleString()+' pzas · '+item.pn,'ok');
   if (avisoComp) alert(avisoComp);
+  if (avisoP3) alert(avisoP3);
   selIdx=null;
   document.getElementById('movForm').className='mf';
   document.getElementById('mfRef').value='';
 }
+
+
+/* ══════════════════════════════════════════════════════════════════
+   ↩ REVERTIR PALLET ESCANEADO (solo admin)
+   Deshace la recepción completa de un pallet: quita la entrada, regresa los componentes
+   que se descontaron (Sheet, Chip Board, etc.), deja el pallet en PENDIENTE y marca los
+   movimientos originales como revertidos. Queda registro (origen REVERSION). No cuenta como consumo.
+   ══════════════════════════════════════════════════════════════════ */
+/* ⬇️ DESCUENTO AUTOMÁTICO EN IMS P3: al recibir en P4 un pallet que viene de P3 (escaneo con QR), se registra solo la SALIDA en el IMS P3.
+   Queda en el historial de P3 ("→ P4 · pallet X"), se marca en el pallet (p3Salida) y se revierte si el pallet se libera o se revierte. */
+const TXT_P3S = {
+  es:{ ref:'→ P4 · pallet {id}', refRev:'REVERSIÓN → P4 · pallet {id}', sinPN:'No existe {pn} en el IMS P3', sinStock:'El IMS P3 tiene {n} de {pn} y se necesitan {q}',
+       dup:'En IMS P3 ya hay una Salida de {q} pzas hecha por {u} ({f}).\n\n¿Descontar OTRA VEZ por este pallet?\n\nAceptar = descontar de nuevo · Cancelar = no descontar (ya estaba hecha a mano)', omit:'Descuento en IMS P3 omitido',
+       ok:'📉 IMS P3: −{q} pzas · {pn}', fail:'⚠️ El pallet SÍ se recibió en P4, pero NO se descontó en IMS P3:\n{m}\n\nHaz la Salida manual en IMS P3: {q} pzas de {pn}.',
+       revOk:'↩ IMS P3: +{q} pzas regresadas · {pn}', revFail:'⚠️ Se liberó el pallet, pero NO se pudo regresar la Salida en IMS P3:\n{m}\n\nAjusta el stock de P3 a mano.', sinDoc:'No se encontró la parte en IMS P3' },
+  en:{ ref:'→ P4 · pallet {id}', refRev:'REVERSAL → P4 · pallet {id}', sinPN:'{pn} does not exist in IMS P3', sinStock:'IMS P3 has {n} of {pn} and {q} are needed',
+       dup:'IMS P3 already has an Exit of {q} pcs made by {u} ({f}).\n\nDeduct AGAIN for this pallet?\n\nOK = deduct again · Cancel = do not deduct (it was already done by hand)', omit:'IMS P3 deduction skipped',
+       ok:'📉 IMS P3: −{q} pcs · {pn}', fail:'⚠️ The pallet WAS received in P4, but it was NOT deducted in IMS P3:\n{m}\n\nMake the manual Exit in IMS P3: {q} pcs of {pn}.',
+       revOk:'↩ IMS P3: +{q} pcs returned · {pn}', revFail:'⚠️ The pallet was released, but the IMS P3 Exit could NOT be returned:\n{m}\n\nAdjust the P3 stock by hand.', sinDoc:'Part not found in IMS P3' },
+  ko:{ ref:'→ P4 · 팔레트 {id}', refRev:'취소 → P4 · 팔레트 {id}', sinPN:'IMS P3에 {pn}이(가) 없습니다', sinStock:'IMS P3의 {pn} 재고는 {n}이며 {q}이(가) 필요합니다',
+       dup:'IMS P3에 이미 {u}님이 만든 {q}개 출고가 있습니다 ({f}).\n\n이 팔레트로 다시 차감하시겠습니까?\n\n확인 = 다시 차감 · 취소 = 차감 안 함(이미 수동 처리됨)', omit:'IMS P3 차감 생략',
+       ok:'📉 IMS P3: −{q}개 · {pn}', fail:'⚠️ 팔레트는 P4에 입고되었지만 IMS P3에서 차감되지 않았습니다:\n{m}\n\nIMS P3에서 수동 출고하세요: {pn} {q}개.',
+       revOk:'↩ IMS P3: +{q}개 복원 · {pn}', revFail:'⚠️ 팔레트는 해제되었지만 IMS P3 출고를 복원하지 못했습니다:\n{m}\n\nP3 재고를 수동으로 조정하세요.', sinDoc:'IMS P3에서 부품을 찾을 수 없습니다' }
+};
+function _t3(k,o){ let s=(TXT_P3S[IMS_LANG]||TXT_P3S.es)[k]||TXT_P3S.es[k]||k; Object.keys(o||{}).forEach(function(x){ s=s.split('{'+x+'}').join(o[x]); }); return s; }
+function _esPalletP3(info){ return !!info && (info.planta==='P3' || info.desde==='P3' || /(^|[-_])P3[-_]/i.test(String(info.id||''))); }
+async function descontarP3(pn, qty, palletId){
+  try{
+    const pr=db.collection('pallets_medio').doc(palletId), pd=await pr.get();
+    if(pd.exists && pd.data().p3Salida) return {ok:true, ya:true};
+    const q=await db.collection('planta3_inventario').where('pn','==',pn).get(), cand=[];
+    q.forEach(function(d){ cand.push({ref:d.ref, id:d.id, d:d.data()}); });
+    if(!cand.length) return {ok:false, msg:_t3('sinPN',{pn:pn})};
+    const c=cand.filter(function(x){ return (parseFloat(x.d.actual)||0)>=qty; })[0];
+    if(!c) return {ok:false, msg:_t3('sinStock',{pn:pn, n:cand.reduce(function(s,x){ return s+(parseFloat(x.d.actual)||0); },0).toLocaleString(), q:qty.toLocaleString()})};
+    const dup=(c.d.historial||[]).filter(function(h){ return h.tipo==='S' && !h.anulado && Number(h.qty)===qty && (Date.now()-Date.parse(h.fecha))<864e5 && String(h.ref||'').indexOf(palletId)<0; })[0];
+    if(dup && !confirm(_t3('dup',{q:qty.toLocaleString(), u:dup.user||'', f:new Date(dup.fecha).toLocaleString()}))) return {ok:false, omit:true, msg:_t3('omit')};
+    const iso=new Date().toISOString(), por=(user&&user.name)||'', refTxt=_t3('ref',{id:palletId});
+    let nuevo=0;
+    await db.runTransaction(async function(tx){
+      const sn=await tx.get(c.ref), x=sn.data(), a=parseFloat(x.actual)||0;
+      if(a<qty) throw new Error(_t3('sinStock',{pn:pn, n:a.toLocaleString(), q:qty.toLocaleString()}));
+      nuevo=a-qty;
+      const hist=(x.historial||[]).concat([{tipo:'S', fecha:iso, qty:qty, loc:x.ubicacion||'Almacén', user:por, ref:refTxt, origen:'AUTO_P4', pallet:palletId}]);
+      tx.update(c.ref,{actual:nuevo, salidas:(parseFloat(x.salidas)||0)+qty, historial:hist});
+    });
+    await db.collection('planta3_movimientos').add({tipo:'S', pn:c.d.pn||pn, desc:c.d.desc||'', familia:c.d.familia||'', qty:qty, fecha:iso, user:por, ref:refTxt, stock:nuevo, loc:c.d.ubicacion||'Almacén', origen:'AUTO_P4', pallet:palletId});
+    await pr.set({p3Salida:{docId:c.id, qty:qty, pn:pn, fecha:iso, por:por}},{merge:true});
+    return {ok:true, nuevo:nuevo};
+  }catch(e){ console.error('descontarP3:', e); return {ok:false, msg:(e&&e.message)?e.message:String(e)}; }
+}
+async function revertirP3(palletId, motivo){
+  try{
+    const pr=db.collection('pallets_medio').doc(palletId), pd=await pr.get(), p3=pd.exists && pd.data().p3Salida;
+    if(!p3) return {ok:true, nada:true};
+    const ref=db.collection('planta3_inventario').doc(p3.docId), iso=new Date().toISOString(), por=(user&&user.name)||'', refTxt=_t3('refRev',{id:palletId})+(motivo?' · '+motivo:'');
+    let nuevo=0, info={};
+    await db.runTransaction(async function(tx){
+      const sn=await tx.get(ref); if(!sn.exists) throw new Error(_t3('sinDoc'));
+      const x=sn.data(); info={pn:x.pn||p3.pn||'', desc:x.desc||'', familia:x.familia||'', loc:x.ubicacion||'Almacén'};
+      const hist=(x.historial||[]).map(function(h){ return (h.tipo==='S' && h.origen==='AUTO_P4' && h.pallet===palletId && !h.anulado) ? Object.assign({},h,{anulado:true}) : h; });
+      hist.push({tipo:'A', fecha:iso, qty:p3.qty, loc:info.loc, user:por, ref:refTxt, signo:'+', origen:'REVERSION', pallet:palletId});
+      nuevo=(parseFloat(x.actual)||0)+p3.qty;
+      tx.update(ref,{actual:nuevo, salidas:Math.max(0,(parseFloat(x.salidas)||0)-p3.qty), historial:hist});
+    });
+    await db.collection('planta3_movimientos').add({tipo:'A', pn:info.pn, desc:info.desc, familia:info.familia, qty:p3.qty, fecha:iso, user:por, ref:refTxt, motivo:motivo||'', signo:'+', stock:nuevo, loc:info.loc, origen:'REVERSION', pallet:palletId, autorizado:true});
+    await pr.update({p3Salida:firebase.firestore.FieldValue.delete()});
+    return {ok:true, qty:p3.qty, pn:info.pn};
+  }catch(e){ console.error('revertirP3:', e); return {ok:false, msg:(e&&e.message)?e.message:String(e)}; }
+}
+async function _revP3Msg(palletId, motivo){
+  const r=await revertirP3(palletId, motivo);
+  if(r.ok && !r.nada) toast(_t3('revOk',{q:Number(r.qty).toLocaleString(), pn:r.pn}),'ok');
+  else if(!r.ok) alert(_t3('revFail',{m:r.msg}));
+}
+window.descontarP3=descontarP3; window.revertirP3=revertirP3;
+
+var TXT_REV = {
+  es:{btn:'Revertir',tagRev:'revertido',tagReversion:'reversión',soloAdmin:'Solo el administrador puede revertir un pallet',
+      nada:'No hay movimientos de este pallet por revertir (ya fue revertido o no existe).',
+      noParte:'No se encontró en el IMS la parte:\n',
+      neg:function(l){return '⛔ NO se puede revertir: el stock quedaría NEGATIVO (ya se usó material de este pallet).\n\n'+l+'\n\nHaz primero un AJUSTE o corrige el consumo.';},
+      motivo:'Motivo de la reversión (mínimo 5 letras):',motivoBad:'Escribe el motivo (mínimo 5 letras)',
+      conf:function(id,l){return '↩ REVERTIR PALLET '+id+'\n\n'+l+'\n\nEl pallet quedará PENDIENTE (se puede escanear otra vez).\n\n¿Confirmar?';},
+      ok:'↩ Pallet revertido: ',fail:'❌ La reversión se detuvo:\n',cargando:'⏳ Revirtiendo…',sale:'➖ SALE',entra:'➕ REGRESA'},
+  en:{btn:'Revert',tagRev:'reverted',tagReversion:'reversal',soloAdmin:'Only the administrator can revert a pallet',
+      nada:'There are no movements to revert for this pallet (already reverted or not found).',
+      noParte:'Part not found in IMS:\n',
+      neg:function(l){return '⛔ CANNOT revert: stock would become NEGATIVE (material from this pallet was already used).\n\n'+l+'\n\nDo an ADJUST first or fix the consumption.';},
+      motivo:'Reason for the reversal (at least 5 letters):',motivoBad:'Write the reason (at least 5 letters)',
+      conf:function(id,l){return '↩ REVERT PALLET '+id+'\n\n'+l+'\n\nThe pallet will go back to PENDING (it can be scanned again).\n\nConfirm?';},
+      ok:'↩ Pallet reverted: ',fail:'❌ The reversal stopped:\n',cargando:'⏳ Reverting…',sale:'➖ OUT',entra:'➕ BACK'},
+  ko:{btn:'되돌리기',tagRev:'취소됨',tagReversion:'취소 처리',soloAdmin:'관리자만 팔레트를 되돌릴 수 있습니다',
+      nada:'이 팔레트에 되돌릴 이동이 없습니다 (이미 취소되었거나 없음).',
+      noParte:'IMS에서 부품을 찾을 수 없습니다:\n',
+      neg:function(l){return '⛔ 되돌릴 수 없습니다: 재고가 음수가 됩니다 (이 팔레트의 자재가 이미 사용됨).\n\n'+l+'\n\n먼저 조정하거나 소비를 수정하세요.';},
+      motivo:'되돌리기 사유 (5자 이상):',motivoBad:'사유를 입력하세요 (5자 이상)',
+      conf:function(id,l){return '↩ 팔레트 되돌리기 '+id+'\n\n'+l+'\n\n팔레트는 대기(PENDING) 상태로 돌아가며 다시 스캔할 수 있습니다.\n\n확인하시겠습니까?';},
+      ok:'↩ 팔레트 되돌림: ',fail:'❌ 되돌리기가 중단되었습니다:\n',cargando:'⏳ 되돌리는 중…',sale:'➖ 출고',entra:'➕ 복원'}
+};
+var _revBusy = false;
+async function revertirPallet(palletId){
+  const L = TXT_REV[IMS_LANG] || TXT_REV.es;
+  if (!user || user.role!=='admin') { toast(L.soloAdmin,'err'); return; }
+  if (!db || _revBusy) return;
+  _revBusy = true;
+  try {
+    toast(L.cargando,'info');
+    const snap = await db.collection('planta4_movimientos').where('pallet','==',palletId).get();
+    const docs = [];
+    snap.forEach(function(d){ const m=d.data(); if ((m.origen==='LINEA'||m.origen==='MEDIO_PROCESO') && !m.revertido) docs.push({ref:d.ref, m:m}); });
+    if (!docs.length) { alert(L.nada); return; }
+    docs.sort(function(a,b){ return String(a.m.fecha).localeCompare(String(b.m.fecha)); });
+    const plan = [], faltan = [], corriendo = {};
+    docs.forEach(function(x){
+      const m = x.m, it = items.find(function(i){ return i.pn===m.pn && i.desc===m.desc; });
+      if (!it) { faltan.push(m.pn+' · '+m.desc); return; }
+      const qty = Number(m.qty)||0, esE = (m.tipo==='E');
+      const aplicado = esE ? qty : Math.max(0, qty-(Number(m.faltante)||0));
+      const k = it.pn+'|'+it.desc;
+      if (corriendo[k]===undefined) corriendo[k] = parseFloat(it.actual)||0;
+      const a0 = corriendo[k], nuevo = esE ? a0-qty : a0+aplicado;
+      corriendo[k] = nuevo;
+      plan.push({x:x, it:it, m:m, qty:qty, esE:esE, aplicado:aplicado, a0:a0, nuevo:nuevo});
+    });
+    if (faltan.length) { alert(L.noParte+faltan.join('\n')); return; }
+    const negs = plan.filter(function(p){ return p.nuevo<0; });
+    if (negs.length) { alert(L.neg(negs.map(function(p){ return p.m.pn+' · '+p.m.desc+'  ('+p.a0.toLocaleString()+' → '+p.nuevo.toLocaleString()+')'; }).join('\n'))); return; }
+    const lineas = plan.map(function(p){
+      return (p.esE ? L.sale : L.entra)+':  '+p.m.pn+' · '+p.m.desc+'   '+(p.esE?'-':'+')+(p.esE?p.qty:p.aplicado).toLocaleString()+'   ('+p.a0.toLocaleString()+' → '+p.nuevo.toLocaleString()+')';
+    }).join('\n');
+    const motivo = (prompt(L.motivo,'') || '').trim();
+    if (motivo.length < 5) { if (motivo) toast(L.motivoBad,'err'); return; }
+    const totalQty = plan.reduce(function(s,p){ return s+p.qty; },0);
+    if (!(await pedirClaveManual(palletId, totalQty, 'A'))) return;
+    if (!confirm(L.conf(palletId, lineas))) return;
+    const iso = new Date().toISOString(), refTxt = 'REVERSIÓN · '+palletId+' · '+motivo;
+    const hechos = [];
+    for (const p of plan) {
+      const it = p.it, cant = p.esE ? p.qty : p.aplicado, signo = p.esE ? '-' : '+';
+      const antes = {entradas:it.entradas, salidas:it.salidas, actual:it.actual};
+      if (p.esE) { it.entradas = (parseFloat(it.entradas)||0)-p.qty; it.actual = (parseFloat(it.actual)||0)-p.qty; }
+      else       { it.salidas = (parseFloat(it.salidas)||0)-p.qty;   it.actual = (parseFloat(it.actual)||0)+p.aplicado; }
+      const hItem = {tipo:'A', fecha:iso, qty:cant, loc:it.ubicacion||'Almacén', user:user.name, ref:refTxt, signo:signo};
+      if (!it.historial) it.historial = [];
+      it.historial.push(hItem);
+      const mov = {tipo:'A', pn:it.pn, desc:it.desc, familia:it.familia, qty:cant, fecha:iso, user:user.name, ref:refTxt, motivo:motivo, signo:signo, stock:it.actual, loc:it.ubicacion||'Almacén', origen:'REVERSION', pallet:palletId, autorizado:true};
+      if (p.m.vcTipo==='RECIBO') { mov.vcTipo='RECIBO'; mov.vc=p.m.vc; mov.vcKey=p.m.vcKey; mov.vcQty=-(Number(p.m.vcQty)||0); }
+      const delta = p.esE ? {entradas:-p.qty, salidas:0, actual:-p.qty} : {entradas:0, salidas:-p.qty, actual:p.aplicado};
+      movs.unshift(mov); saveLocal();
+      const res = await pushMov(mov, delta, hItem);
+      if (!res.ok) {
+        it.entradas=antes.entradas; it.salidas=antes.salidas; it.actual=antes.actual; it.historial.pop(); movs.shift(); saveLocal();
+        updateDash(); renderInv(); renderHist(); renderLocMap();
+        alert(L.fail+p.m.pn+': '+res.err+(hechos.length?'\n\n(Ya revertidos: '+hechos.join(', ')+')':'')+'\n\nEl pallet NO se liberó.');
+        return;
+      }
+      try { await p.x.ref.update({revertido:true, revertidoPor:user.name, revertidoFecha:iso, revertidoMotivo:motivo}); } catch(e) { console.error('marcar revertido:', e); }
+      hechos.push(p.m.pn);
+    }
+    try {
+      const pr = db.collection('pallets_medio').doc(palletId), d = await pr.get();
+      if (d.exists) {
+        const dd = d.data(), rec = dd.recepciones||[], D = firebase.firestore.FieldValue.delete();
+        if (rec.length) { const u = rec[rec.length-1]; await pr.update({status:'RECEIVED', recibidoEn:u.planta, recibidoPor:u.por||'', recibidoFecha:u.fecha||'', recepciones:rec.slice(0,-1)}); }
+        else await pr.update({status:'PENDING', recibidoEn:D, recibidoPor:D, recibidoFecha:D});
+      }
+    } catch(e) { console.error('liberar pallet:', e); alert('⚠️ Stock revertido, pero no se pudo dejar el pallet en PENDIENTE: '+e.message+'\nCámbialo a mano en Firestore → pallets_medio.'); }
+    updateDash(); renderInv(); renderHist(); renderLocMap();
+    try{ await _revP3Msg(palletId, motivo); }catch(e){ console.error(e); }
+    toast(L.ok+palletId,'ok');
+  } catch(e) {
+    console.error(e); alert(L.fail+(e&&e.message?e.message:e));
+  } finally { _revBusy = false; }
+}
+window.revertirPallet = revertirPallet;
 
 // ── TRAZABILIDAD ──
 const FSTEPS = [{l:'Almacén',i:'📦'},{l:'En Línea',i:'🏭'},{l:'Proceso',i:'⚙️'},{l:'QC',i:'🔬'},{l:'Final',i:'✅'}];
@@ -2955,6 +3246,7 @@ function renderHist() {
   const el = document.getElementById('histList');
   el.innerHTML = f.length ? f.slice(0,60).map(movHTML).join('') : '<div class="empty">📋<br>Sin movimientos</div>';
 }
+function _lr(){ return (typeof TXT_REV!=='undefined' && TXT_REV) ? (TXT_REV[IMS_LANG]||TXT_REV.es) : {btn:'Revertir',tagRev:'revertido',tagReversion:'reversión'}; }
 function movHTML(m) {
   // Normaliza campos: el MES (Cierre de Jornada) usa nombres distintos a los nativos de IMS
   const tipoNorm = m.tipo==='OUT' ? 'S' : m.tipo==='IN' ? 'E' : m.tipo;
@@ -2965,11 +3257,16 @@ function movHTML(m) {
   let badge='';
   if (m.origen==='LINEA') badge=' · <span style="color:var(--green)">📦 Etiqueta de línea'+((m.planta&&m.planta!=='P4')?' '+m.planta:'')+(m.maq?' '+m.maq:'')+' · '+(m.pallet||'')+'</span>';
   else if (tipoNorm==='E' && /^GH69/i.test(m.pn||'') && !ref) badge=' · <span style="color:var(--red)">⚠️ sin etiqueta de línea</span>';
+  if (m.revertido) badge+=' · <span style="color:#f5a623">↩ '+_lr().tagRev+'</span>';
+  else if (m.origen==='REVERSION') badge+=' · <span style="color:#f5a623">↩ '+_lr().tagReversion+'</span>';
+  let btnRev='';
+  if (user && user.role==='admin' && m.pallet && !m.revertido && (m.origen==='LINEA'||m.origen==='MEDIO_PROCESO'))
+    btnRev='<div style="margin-top:5px"><button onclick="event.stopPropagation();revertirPallet(\''+String(m.pallet).replace(/[^\w\-\.]/g,'')+'\')" style="padding:4px 10px;border-radius:6px;border:1px solid #f5a623;background:transparent;color:#f5a623;font-size:11px;font-weight:600;cursor:pointer">↩ '+_lr().btn+'</button></div>';
   const icons={E:'⬇️',S:'⬆️',T:'🔀',A:'⚖️',INI:'🏁'};
   const cols={E:'mb-E',S:'mb-S',T:'mb-T',A:'mb-A',INI:'mb-T'};
   const qc={E:'color:var(--green)',S:'color:var(--red)',T:'color:var(--accent)',A:'color:#f5a623'};
   const signs={E:'+',S:'-',T:'→',A:(m.signo==='+'?'+':'-')};
-  return '<div class="mc"><div class="mb '+(cols[tipoNorm]||'mb-T')+'">'+(icons[tipoNorm]||'🔄')+'</div><div style="flex:1;min-width:0"><div class="mc-t">'+(m.pn||'–')+'</div><div class="mc-d">'+(m.desc||'')+' · '+(m.familia||'')+' · '+usr+'</div><div class="mc-l">📍 '+loc+' · '+fmtDate(m.fecha)+(ref?' · '+ref:'')+badge+'</div></div><div class="mc-q" style="'+(qc[tipoNorm]||'')+'">'+(signs[tipoNorm]||'')+qty+'</div></div>';
+  return '<div class="mc"><div class="mb '+(cols[tipoNorm]||'mb-T')+'">'+(icons[tipoNorm]||'🔄')+'</div><div style="flex:1;min-width:0"><div class="mc-t">'+(m.pn||'–')+'</div><div class="mc-d">'+(m.desc||'')+' · '+(m.familia||'')+' · '+usr+'</div><div class="mc-l">📍 '+loc+' · '+fmtDate(m.fecha)+(ref?' · '+ref:'')+badge+'</div>'+btnRev+'</div><div class="mc-q" style="'+(qc[tipoNorm]||'')+'">'+(signs[tipoNorm]||'')+qty+'</div></div>';
 }
 
 // Exporta el historial (Historial > Excel) respetando el filtro de tipo y la búsqueda actuales
